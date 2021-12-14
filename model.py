@@ -27,7 +27,7 @@ class ConvBlock(nn.Module):
         self.residual = residual
 
     def forward(self, x):
-        x += self.net(x)
+        x = self.net(x)
         return self.down(x)
 
 class PredictorNet(nn.Module):

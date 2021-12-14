@@ -1,220 +1,285 @@
-import os
-import multiprocessing
 from collections import OrderedDict
 from typing import Sequence
+from copy import deepcopy
 
 import gym
 import numpy as np
+import torch
 
-from baseVecEnv import VecEnv, CloudpickleWrapper
+from baseVecEnv import VecEnv
 
-
-def _worker(remote, parent_remote, env_fn_wrapper):
-    parent_remote.close()
-    env = env_fn_wrapper.var()
-    while True:
-        try:
-            cmd, data = remote.recv()
-            if cmd == 'step':
-                observation, reward, done, info = env.step(data)
-                if done:
-                    # save final observation where user can get it, then reset
-                    info['terminal_observation'] = observation
-                    observation = env.reset()
-                remote.send((observation, reward, done, info))
-            elif cmd == 'seed':
-                remote.send(env.seed(data))
-            elif cmd == 'reset':
-                observation = env.reset()
-                remote.send(observation)
-            elif cmd == 'render':
-                remote.send(env.render(data))
-            elif cmd == 'close':
-                env.close()
-                remote.close()
-                break
-            elif cmd == 'get_spaces':
-                remote.send((env.observation_space, env.action_space))
-            elif cmd == 'env_method':
-                method = getattr(env, data[0])
-                remote.send(method(*data[1], **data[2]))
-            elif cmd == 'get_attr':
-                remote.send(getattr(env, data))
-            elif cmd == 'set_attr':
-                remote.send(setattr(env, data[0], data[1]))
-            else:
-                raise NotImplementedError("`{}` is not implemented in the worker".format(cmd))
-        except EOFError:
-            break
-
-
-class SubprocVecEnv(VecEnv):
+def copy_obs_dict(obs):
     """
-    Creates a multiprocess vectorized wrapper for multiple environments, distributing each environment to its own
-    process, allowing significant speed up when the environment is computationally complex.
+    Deep-copy a dict of numpy arrays.
+    :param obs: (OrderedDict<ndarray>): a dict of numpy arrays.
+    :return (OrderedDict<ndarray>) a dict of copied numpy arrays.
+    """
+    assert isinstance(obs, OrderedDict), "unexpected type for observations '{}'".format(type(obs))
+    return OrderedDict([(k, v) for k, v in obs.items()])
 
-    For performance reasons, if your environment is not IO bound, the number of environments should not exceed the
-    number of logical cores on your CPU.
 
-    .. warning::
+def dict_to_obs(space, obs_dict):
+    """
+    Convert an internal representation raw_obs into the appropriate type
+    specified by space.
+    :param space: (gym.spaces.Space) an observation space.
+    :param obs_dict: (OrderedDict<ndarray>) a dict of numpy arrays.
+    :return (ndarray, tuple<ndarray> or dict<ndarray>): returns an observation
+            of the same type as space. If space is Dict, function is identity;
+            if space is Tuple, converts dict to Tuple; otherwise, space is
+            unstructured and returns the value raw_obs[None].
+    """
+    if isinstance(space, gym.spaces.Dict):
+        return obs_dict
+    elif isinstance(space, gym.spaces.Tuple):
+        assert len(obs_dict) == len(space.spaces), "size of observation does not match size of observation space"
+        return tuple((obs_dict[i] for i in range(len(space.spaces))))
+    else:
+        assert set(obs_dict.keys()) == {None}, "multiple observation keys for unstructured observation space"
+        return obs_dict[None]
 
-        Only 'forkserver' and 'spawn' start methods are thread-safe,
-        which is important when TensorFlow sessions or other non thread-safe
-        libraries are used in the parent (see issue #217). However, compared to
-        'fork' they incur a small start-up cost and have restrictions on
-        global variables. With those methods, users must wrap the code in an
-        ``if __name__ == "__main__":`` block.
-        For more information, see the multiprocessing documentation.
+
+def obs_space_info(obs_space):
+    """
+    Get dict-structured information about a gym.Space.
+    Dict spaces are represented directly by their dict of subspaces.
+    Tuple spaces are converted into a dict with keys indexing into the tuple.
+    Unstructured spaces are represented by {None: obs_space}.
+    :param obs_space: (gym.spaces.Space) an observation space
+    :return (tuple) A tuple (keys, shapes, dtypes):
+        keys: a list of dict keys.
+        shapes: a dict mapping keys to shapes.
+        dtypes: a dict mapping keys to dtypes.
+    """
+    if isinstance(obs_space, gym.spaces.Dict):
+        assert isinstance(obs_space.spaces, OrderedDict), "Dict space must have ordered subspaces"
+        subspaces = obs_space.spaces
+    elif isinstance(obs_space, gym.spaces.Tuple):
+        subspaces = {i: space for i, space in enumerate(obs_space.spaces)}
+    else:
+        assert not hasattr(obs_space, 'spaces'), "Unsupported structured space '{}'".format(type(obs_space))
+        subspaces = {None: obs_space}
+    keys = []
+    shapes = {}
+    dtypes = {}
+    for key, box in subspaces.items():
+        keys.append(key)
+        shapes[key] = box.shape
+        dtypes[key] = box.dtype
+    return keys, shapes, dtypes
+
+'''class DummyVecEnv(VecEnv):
+    """
+    Creates a simple vectorized wrapper for multiple environments, calling each environment in sequence on the current
+    Python process. This is useful for computationally simple environment such as ``cartpole-v1``, as the overhead of
+    multiprocess or multithread outweighs the environment computation time. This can also be used for RL methods that
+    require a vectorized environment, but that you want a single environments to train with.
 
     :param env_fns: ([callable]) A list of functions that will create the environments
         (each callable returns a `Gym.Env` instance when called).
-    :param start_method: (str) method used to start the subprocesses.
-           Must be one of the methods returned by multiprocessing.get_all_start_methods().
-           Defaults to 'forkserver' on available platforms, and 'spawn' otherwise.
     """
 
-    def __init__(self, env_fns, start_method=None):
-        self.waiting = False
-        self.closed = False
-        n_envs = len(env_fns)
+    def __init__(self, env_fns):
+        self.envs = [fn() for fn in env_fns]
+        env = self.envs[0]
+        VecEnv.__init__(self, len(env_fns), env.observation_space, env.action_space)
+        obs_space = env.observation_space
+        self.keys, shapes, dtypes = obs_space_info(obs_space)
 
-        # In some cases (like on GitHub workflow machine when running tests),
-        # "forkserver" method results in an "connection error" (probably due to mpi)
-        # We allow to bypass the default start method if an environment variable
-        # is specified by the user
-        if start_method is None:
-            start_method = os.environ.get("DEFAULT_START_METHOD")
-
-        # No DEFAULT_START_METHOD was specified, start_method may still be None
-        if start_method is None:
-            # Fork is not a thread safe method (see issue #217)
-            # but is more user friendly (does not require to wrap the code in
-            # a `if __name__ == "__main__":`)
-            forkserver_available = 'forkserver' in multiprocessing.get_all_start_methods()
-            start_method = 'forkserver' if forkserver_available else 'spawn'
-        ctx = multiprocessing.get_context(start_method)
-
-        self.remotes, self.work_remotes = zip(*[ctx.Pipe(duplex=True) for _ in range(n_envs)])
-        self.processes = []
-        for work_remote, remote, env_fn in zip(self.work_remotes, self.remotes, env_fns):
-            args = (work_remote, remote, CloudpickleWrapper(env_fn))
-            # daemon=True: if the main process crashes, we should not cause things to hang
-            process = ctx.Process(target=_worker, args=args, daemon=True)  # pytype:disable=attribute-error
-            process.start()
-            self.processes.append(process)
-            work_remote.close()
-
-        self.remotes[0].send(('get_spaces', None))
-        observation_space, action_space = self.remotes[0].recv()
-        VecEnv.__init__(self, len(env_fns), observation_space, action_space)
+        self.buf_obs = OrderedDict([
+            (k, torch.zeros((self.num_envs,) + tuple(shapes[k])))
+            for k in self.keys])
+        self.buf_dones = torch.zeros((self.num_envs,))
+        self.buf_rews = torch.zeros((self.num_envs,))
+        self.buf_infos = [{} for _ in range(self.num_envs)]
+        self.actions = None
+        self.metadata = env.metadata
 
     def step_async(self, actions):
-        for remote, action in zip(self.remotes, actions):
-            remote.send(('step', action))
-        self.waiting = True
+        self.actions = actions
 
 
     def step_wait(self):
-        results = [remote.recv() for remote in self.remotes]
-        self.waiting = False
-        obs, rews, dones, infos = zip(*results)
-        return _flatten_obs(obs, self.observation_space), np.stack(rews), np.stack(dones), infos
+        for env_idx in range(self.num_envs):
+            obs, self.buf_rews[env_idx], self.buf_dones[env_idx], self.buf_infos[env_idx] =\
+                self.envs[env_idx].step(self.actions[env_idx])
+            if self.buf_dones[env_idx]:
+                # save final observation where user can get it, then reset
+                self.buf_infos[env_idx]['terminal_observation'] = obs
+                obs = self.envs[env_idx].reset()
+            self._save_obs(env_idx, obs)
+        return (self._obs_from_buf(), self.buf_rews, self.buf_dones,
+                self.buf_infos)
 
 
     def seed(self, seed=None):
-        for idx, remote in enumerate(self.remotes):
-            remote.send(('seed', seed + idx))
-        return [remote.recv() for remote in self.remotes]
+        seeds = list()
+        for idx, env in enumerate(self.envs):
+            seeds.append(env.seed(seed + idx))
+        return seeds
 
 
     def reset(self):
-        for remote in self.remotes:
-            remote.send(('reset', None))
-        obs = [remote.recv() for remote in self.remotes]
-        return _flatten_obs(obs, self.observation_space)
+        for env_idx in range(self.num_envs):
+            obs = self.envs[env_idx].reset()
+            self._save_obs(env_idx, obs)
+        return self._obs_from_buf()
 
 
     def close(self):
-        if self.closed:
-            return
-        if self.waiting:
-            for remote in self.remotes:
-                remote.recv()
-        for remote in self.remotes:
-            remote.send(('close', None))
-        for process in self.processes:
-            process.join()
-        self.closed = True
+        for env in self.envs:
+            env.close()
 
 
     def get_images(self) -> Sequence[np.ndarray]:
-        for pipe in self.remotes:
-            # gather images from subprocesses
-            # `mode` will be taken into account later
-            pipe.send(('render', 'rgb_array'))
-        imgs = [pipe.recv() for pipe in self.remotes]
-        return imgs
+        return [env.render(mode='rgb_array') for env in self.envs]
 
+
+    def render(self, mode: str = 'human'):
+        """
+        Gym environment rendering. If there are multiple environments then
+        they are tiled together in one image via `BaseVecEnv.render()`.
+        Otherwise (if `self.num_envs == 1`), we pass the render call directly to the
+        underlying environment.
+
+        Therefore, some arguments such as `mode` will have values that are valid
+        only when `num_envs == 1`.
+
+        :param mode: The rendering type.
+        """
+        if self.num_envs == 1:
+            return self.envs[0].render(mode=mode)
+        else:
+            return super().render(mode=mode)
+
+
+    def _save_obs(self, env_idx, obs):
+        for key in self.keys:
+            if key is None:
+                self.buf_obs[key][env_idx] = obs
+            else:
+                self.buf_obs[key][env_idx] = obs[key]
+
+    def _obs_from_buf(self):
+        return dict_to_obs(self.observation_space, copy_obs_dict(self.buf_obs))
 
     def get_attr(self, attr_name, indices=None):
         """Return attribute from vectorized environment (see base class)."""
-        target_remotes = self._get_target_remotes(indices)
-        for remote in target_remotes:
-            remote.send(('get_attr', attr_name))
-        return [remote.recv() for remote in target_remotes]
+        target_envs = self._get_target_envs(indices)
+        return [getattr(env_i, attr_name) for env_i in target_envs]
 
 
     def set_attr(self, attr_name, value, indices=None):
         """Set attribute inside vectorized environments (see base class)."""
-        target_remotes = self._get_target_remotes(indices)
-        for remote in target_remotes:
-            remote.send(('set_attr', (attr_name, value)))
-        for remote in target_remotes:
-            remote.recv()
+        target_envs = self._get_target_envs(indices)
+        for env_i in target_envs:
+            setattr(env_i, attr_name, value)
 
 
     def env_method(self, method_name, *method_args, indices=None, **method_kwargs):
         """Call instance methods of vectorized environments."""
-        target_remotes = self._get_target_remotes(indices)
-        for remote in target_remotes:
-            remote.send(('env_method', (method_name, method_args, method_kwargs)))
-        return [remote.recv() for remote in target_remotes]
+        target_envs = self._get_target_envs(indices)
+        return [getattr(env_i, method_name)(*method_args, **method_kwargs) for env_i in target_envs]
 
 
-    def _get_target_remotes(self, indices):
-        """
-        Get the connection object needed to communicate with the wanted
-        envs that are in subprocesses.
-
-        :param indices: (None,int,Iterable) refers to indices of envs.
-        :return: ([multiprocessing.Connection]) Connection object to communicate between processes.
-        """
+    def _get_target_envs(self, indices):
         indices = self._get_indices(indices)
-        return [self.remotes[i] for i in indices]
+        return [self.envs[i] for i in indices]'''
+
+class SimpleVecEnv(VecEnv):
+
+    def __init__(self, env_fns):
+        self.envs = [fn() for fn in env_fns]
+        env = self.envs[0]
+        VecEnv.__init__(self, len(env_fns), env.observation_space, env.action_space)
+        obs_space = env.observation_space
+        self.keys, shapes, dtypes = obs_space_info(obs_space)
+        self.actions = None
 
 
+    def step_async(self, actions):
+        self.actions = actions
 
-def _flatten_obs(obs, space):
-    """
-    Flatten observations, depending on the observation space.
+    def step_wait(self):
+        obs_buf = []
+        buf_rews = []
+        buf_dones = []
+        buf_infos = []
 
-    :param obs: (list<X> or tuple<X> where X is dict<ndarray>, tuple<ndarray> or ndarray) observations.
-                A list or tuple of observations, one per environment.
-                Each environment observation may be a NumPy array, or a dict or tuple of NumPy arrays.
-    :return (OrderedDict<ndarray>, tuple<ndarray> or ndarray) flattened observations.
-            A flattened NumPy array or an OrderedDict or tuple of flattened numpy arrays.
-            Each NumPy array has the environment index as its first axis.
-    """
-    assert isinstance(obs, (list, tuple)), "expected list or tuple of observations per environment"
-    assert len(obs) > 0, "need observations from at least one environment"
+        for env_idx in range(self.num_envs):
+            obs, buf_rew, buf_done, buf_info = self.envs[env_idx].step(self.actions[env_idx])
+            if buf_done:
+                # save final observation where user can get it, then reset
+                buf_info['terminal_observation'] = obs
+                obs = self.envs[env_idx].reset()
+            obs_buf.append(obs.squeeze())
+            buf_rews.append(buf_rew)
+            buf_dones.append(buf_done)
+            buf_infos.append(buf_info)
+        return (torch.stack(obs_buf), torch.stack(buf_rews), torch.stack(buf_dones),
+                buf_infos)
 
-    if isinstance(space, gym.spaces.Dict):
-        assert isinstance(space.spaces, OrderedDict), "Dict space must have ordered subspaces"
-        assert isinstance(obs[0], dict), "non-dict observation for environment with Dict observation space"
-        return OrderedDict([(k, np.stack([o[k] for o in obs])) for k in space.spaces.keys()])
-    elif isinstance(space, gym.spaces.Tuple):
-        assert isinstance(obs[0], tuple), "non-tuple observation for environment with Tuple observation space"
-        obs_len = len(space.spaces)
-        return tuple((np.stack([o[i] for o in obs]) for i in range(obs_len)))
-    else:
-        return np.stack(obs)
+
+    def seed(self, seed=None):
+        seeds = list()
+        for idx, env in enumerate(self.envs):
+            seeds.append(env.seed(seed + idx))
+        return seeds
+
+
+    def reset(self):
+        obs_buf = []
+        for env_idx in range(self.num_envs):
+            obs = self.envs[env_idx].reset()
+            obs_buf.append(obs)
+        return torch.stack(obs_buf)
+
+
+    def close(self):
+        for env in self.envs:
+            env.close()
+
+
+    def get_images(self) -> Sequence[np.ndarray]:
+        return [env.render(mode='rgb_array') for env in self.envs]
+
+
+    def render(self, mode: str = 'human'):
+        """
+        Gym environment rendering. If there are multiple environments then
+        they are tiled together in one image via `BaseVecEnv.render()`.
+        Otherwise (if `self.num_envs == 1`), we pass the render call directly to the
+        underlying environment.
+
+        Therefore, some arguments such as `mode` will have values that are valid
+        only when `num_envs == 1`.
+
+        :param mode: The rendering type.
+        """
+        if self.num_envs == 1:
+            return self.envs[0].render(mode=mode)
+        else:
+            return super().render(mode=mode)
+
+    def get_attr(self, attr_name, indices=None):
+        """Return attribute from vectorized environment (see base class)."""
+        target_envs = self._get_target_envs(indices)
+        return [getattr(env_i, attr_name) for env_i in target_envs]
+
+
+    def set_attr(self, attr_name, value, indices=None):
+        """Set attribute inside vectorized environments (see base class)."""
+        target_envs = self._get_target_envs(indices)
+        for env_i in target_envs:
+            setattr(env_i, attr_name, value)
+
+
+    def env_method(self, method_name, *method_args, indices=None, **method_kwargs):
+        """Call instance methods of vectorized environments."""
+        target_envs = self._get_target_envs(indices)
+        return [getattr(env_i, method_name)(*method_args, **method_kwargs) for env_i in target_envs]
+
+
+    def _get_target_envs(self, indices):
+        indices = self._get_indices(indices)
+        return [self.envs[i] for i in indices]

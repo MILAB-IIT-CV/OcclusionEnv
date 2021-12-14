@@ -11,11 +11,58 @@ from pytorch3d.renderer import (
     RasterizationSettings, MeshRenderer, MeshRasterizer, BlendParams,
     SoftSilhouetteShader, HardPhongShader, PointLights, TexturesVertex,
 )
+from pytorch3d.structures import Meshes
+from pytorch3d.io import load_obj
+
+# Set the cuda device
+if torch.cuda.is_available():
+    device = torch.device("cuda:0")
+    torch.cuda.set_device(device)
+else:
+    device = torch.device("cpu")
+
+def load_default_meshes():
+    # Load the obj and ignore the textures and materials.
+    verts, faces_idx, _ = load_obj("./data/teapot.obj")
+    faces = faces_idx.verts_idx
+
+    # Initialize each vertex to be white in color.
+    verts_rgb = torch.ones_like(verts)[None]  # (1, V, 3)
+    textures = TexturesVertex(verts_features=verts_rgb.to(device))
+
+    verts2 = verts + torch.tensor([0, 0, 2.0])
+
+    verts3 = torch.vstack([verts, verts2])
+    faces3 = torch.vstack([faces, faces + verts.shape[0]])
+    # Initialize each vertex to be white in color.
+    verts_rgb3 = torch.ones_like(verts3)[None]  # (1, V, 3)
+    textures3 = TexturesVertex(verts_features=verts_rgb3.to(device))
+
+    # Create a Meshes object for the teapot. Here we have only one mesh in the batch.
+    teapot_mesh = Meshes(
+        verts=[verts.to(device)],
+        faces=[faces.to(device)],
+        textures=textures
+    )
+    teapot2_mesh = Meshes(
+        verts=[verts2.to(device)],
+        faces=[faces.to(device)],
+        textures=textures
+    )
+    full_mesh = Meshes(
+        verts=[verts3.to(device)],
+        faces=[faces3.to(device)],
+        textures=textures3
+    )
+
+    return [full_mesh, teapot_mesh, teapot2_mesh]
 
 
 class OcclusionEnv():
     def __init__(self, img_size=256):
         super().__init__()
+
+        self.metadata = "Blablabla"
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda:0")
@@ -70,7 +117,7 @@ class OcclusionEnv():
 
 
 
-    def reset(self, meshes, radius=4.0, azimuth=0.0, elevation=0.0):
+    def reset(self, meshes=load_default_meshes(), radius=4.0, azimuth=0.0, elevation=0.0):
 
         self.fullReward = 0
 
@@ -83,7 +130,7 @@ class OcclusionEnv():
         self.meshes = meshes
         R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, device=self.device)
 
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0,3,1,2)
 
         return observation
 
