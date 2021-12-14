@@ -3,9 +3,56 @@ from torch import nn as nn
 import numpy as np
 
 # rendering components
-from pytorch3d.renderer import look_at_rotation
+#from pytorch3d.renderer import look_at_rotation
 
-class Robot(nn.Module):
+class Conv(nn.Module):
+    def __init__(self, inch, ch, k_size, stride, dilation, bias):
+        super().__init__()
+
+        self.conv = nn.Conv2d(inch, ch, k_size, stride=stride, dilation=dilation, padding=(k_size+dilation-1)//2, bias=bias)
+        self.bn = nn.BatchNorm2d(ch)
+
+    def forward(self, x):
+        return self.bn(torch.relu(self.conv(x)))
+
+class ConvBlock(nn.Module):
+    def __init__(self, ch, k_size, numLayers, dilation, bias, residual=False):
+        super().__init__()
+
+        self.net = nn.Sequential()
+        for i in range(numLayers):
+            self.net.add_module("Layer %d" % (i+1), Conv(ch, ch, k_size, 1, dilation, bias))
+        self.down = Conv(ch, ch*2, k_size, 2, dilation, bias)
+
+        self.residual = residual
+
+    def forward(self, x):
+        x += self.net(x)
+        return self.down(x)
+
+class PredictorNet(nn.Module):
+    def __init__(self, ch, numOut = 2, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False):
+        super().__init__()
+
+        self.features = nn.Sequential()
+        self.features.add_module("Initial", Conv(4, ch, k_size, 1, 1, bias))
+        for i in range(levels):
+            self.features.add_module("Block %d" % (i+1), ConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual))
+
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.output = nn.Linear(ch*(2**levels), numOut)
+
+    def forward(self, x):
+
+        features = self.features(x)
+        reducedFeatures = self.pool(features).squeeze()
+        output = self.output(reducedFeatures)
+
+        return output
+
+
+
+'''class Robot(nn.Module):
     def __init__(self, meshes, renderer):
         super().__init__()
         self.meshes = meshes
@@ -63,4 +110,4 @@ class Model(nn.Module):
 
         # Calculate the silhouette loss
         loss = torch.sum((image[..., 3] - self.image_ref) ** 2)
-        return loss, image
+        return loss, image'''
