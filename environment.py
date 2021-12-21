@@ -10,6 +10,8 @@ from pytorch3d.renderer import (
     FoVPerspectiveCameras, look_at_view_transform, look_at_rotation,
     RasterizationSettings, MeshRenderer, MeshRasterizer, BlendParams,
     SoftSilhouetteShader, HardPhongShader, PointLights, TexturesVertex,
+    # for ShapeNet
+    OpenGLPerspectiveCameras,
 )
 from pytorch3d.structures import Meshes
 from pytorch3d.io import load_obj
@@ -20,6 +22,22 @@ if torch.cuda.is_available():
     torch.cuda.set_device(device)
 else:
     device = torch.device("cpu")
+
+# ShapeNet components
+from pytorch3d.datasets import (
+    ShapeNetCore,
+    collate_batched_meshes,
+    render_cubified_voxels,
+)
+from torch.utils.data import DataLoader
+
+# path for demo utils functions
+import sys
+import os
+sys.path.append(os.path.abspath(""))
+
+from utils import image_grid
+
 
 def load_default_meshes():
     # Load the obj and ignore the textures and materials.
