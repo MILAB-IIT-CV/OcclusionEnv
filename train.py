@@ -7,12 +7,21 @@ from torch import optim
 from torch.optim import lr_scheduler
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+import os
+from pytorch3d.datasets import ShapeNetCore
 
 if __name__ == '__main__':
 
     numEnvs = 8
 
-    envs = [lambda: OcclusionEnv() for _ in range(numEnvs)]
+    # Check if shapenet is installed
+    shapenetdir = "./data/shapenetcore"
+    if len(os.listdir(shapenetdir)) == 0:
+        envs = [lambda: OcclusionEnv() for _ in range(numEnvs)]
+    else:
+        shapenet_dataset = ShapeNetCore(shapenetdir)
+        envs = [lambda: OcclusionEnv(shapenet_dataset) for _ in range(numEnvs)]
+
     env = SimpleVecEnv(envs)
     net = PredictorNet(8).cuda()
 
@@ -27,7 +36,7 @@ if __name__ == '__main__':
 
     for i in range(numEpisodes):
 
-        obs = env.reset()
+        obs = env.reset_shapenet()
 
         running_loss = 0
 

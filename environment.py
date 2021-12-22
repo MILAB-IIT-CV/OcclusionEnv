@@ -4,6 +4,7 @@ import torch
 from torch import nn as nn
 import cv2
 import numpy as np
+import os
 
 # rendering components
 from pytorch3d.renderer import (
@@ -31,12 +32,49 @@ from pytorch3d.datasets import (
 )
 from torch.utils.data import DataLoader
 
-# path for demo utils functions
-import sys
-import os
-sys.path.append(os.path.abspath(""))
 
-from utils import image_grid
+def load_shapenet_meshes(dataset):
+    # Choose random index for obj#1 and obj#2
+    obj_1_index = np.random.default_rng().integers(low=54)
+    obj_2_index = np.random.default_rng().integers(low=54)
+
+    # initialize obj#1
+    obj_1 = dataset[obj_1_index]
+    obj_1_verts, obj_1_faces = obj_1["verts"], obj_1["faces"]
+
+    # white vertices
+    obj_1_textures = TexturesVertex(verts_features=torch.ones_like(obj_1_verts, device=device)[None])
+    obj_1_mesh = Meshes(
+        verts=[obj_1_verts.to(device)],
+        faces=[obj_1_faces.to(device)],
+        textures=obj_1_textures
+    )
+
+    # initialize obj#2
+    obj_2 = dataset[obj_2_index]
+    obj_2_verts, obj_2_faces = obj_2["verts"] + torch.tensor([0, 0, 2.0]), obj_2["faces"]
+
+    # white vertices
+    obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts, device=device)[None])
+    obj_2_mesh = Meshes(
+        verts=[obj_2_verts.to(device)],
+        faces=[obj_2_faces.to(device)],
+        textures=obj_2_textures
+    )
+
+    verts3 = torch.vstack([obj_1_verts, obj_2_verts])
+    faces3 = torch.vstack([obj_1_faces, obj_2_faces])
+
+    # Initialize each vertex to be white in color.
+    textures3 = TexturesVertex(verts_features=torch.ones_like(verts3, device=device)[None])
+
+    full_mesh = Meshes(
+        verts=[verts3.to(device)],
+        faces=[faces3.to(device)],
+        textures=textures3
+    )
+
+    return [obj_1_mesh, obj_2_mesh, full_mesh]
 
 
 def load_default_meshes():
@@ -52,6 +90,7 @@ def load_default_meshes():
 
     verts3 = torch.vstack([verts, verts2])
     faces3 = torch.vstack([faces, faces + verts.shape[0]])
+
     # Initialize each vertex to be white in color.
     verts_rgb3 = torch.ones_like(verts3)[None]  # (1, V, 3)
     textures3 = TexturesVertex(verts_features=verts_rgb3.to(device))
@@ -77,15 +116,20 @@ def load_default_meshes():
 
 
 class OcclusionEnv():
-    def __init__(self, img_size=256):
+    def __init__(self, data=None, img_size=256):
         super().__init__()
 
         self.metadata = "Blablabla"
+        # :D
 
         if torch.cuda.is_available():
             self.device = torch.device("cuda:0")
         else:
             self.device = torch.device("cpu")
+
+        # Shapenet dataset to be passed as "data" when calling the constructor.
+        self.shapenet_dataset = data
+
         # Initialize a perspective camera.
         cameras = FoVPerspectiveCameras(device=self.device)
 
@@ -133,22 +177,51 @@ class OcclusionEnv():
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
         self.renderMode = 'human'
 
+    def reset_shapenet(self, radius=4.0, azimuth=0.0, elevation=0.0):
 
+        # Check if constructor is called with shapenet dataset, if not, call default (teapot) object mesh loader
+        if self.shapenet_dataset == None:
+            meshes = load_default_meshes()
+        else:
+            meshes = load_shapenet_meshes(dataset=self.shapenet_dataset)
+
+        self.fullReward = 0
+
+        # Set cameare x and y position randomly sampled from [-1 1] uniform distribution & on the z = 0 plane
+        camera_disp_x = np.random.uniform(low=-1, high=1)
+        camera_disp_y = np.random.uniform(low=-1, high=1)
+        self.camera_position = torch.tensor([camera_disp_x, camera_disp_y, 0]).to(self.device)
+
+        self.radius = torch.tensor([radius]).float().to(self.device)
+        self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
+        self.azimuth = torch.tensor([azimuth]).float().to(
+            self.device)  # No rotation so the camera is positioned on the +Z axis.
+
+        self.meshes = meshes
+        R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, device=self.device)
+
+        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
+
+        return observation
 
     def reset(self, meshes=load_default_meshes(), radius=4.0, azimuth=0.0, elevation=0.0):
 
         self.fullReward = 0
 
-        self.camera_position = torch.zeros(3).to(self.device)
+        # Set cameare x and y position randomly sampled from [-1 1] uniform distribution & on the z = 0 plane
+        camera_disp_x = np.random.uniform(low=-1, high=1)
+        camera_disp_y = np.random.uniform(low=-1, high=1)
+        self.camera_position = torch.tensor([camera_disp_x, camera_disp_y, 0]).to(self.device)
 
         self.radius = torch.tensor([radius]).float().to(self.device)
         self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
-        self.azimuth = torch.tensor([azimuth]).float().to(self.device)  # No rotation so the camera is positioned on the +Z axis.
+        self.azimuth = torch.tensor([azimuth]).float().to(
+            self.device)  # No rotation so the camera is positioned on the +Z axis.
 
         self.meshes = meshes
         R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, device=self.device)
 
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0,3,1,2)
+        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
 
         return observation
 
@@ -159,7 +232,7 @@ class OcclusionEnv():
         observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
 
         if self.renderMode == 'human':
-            obs_img = (observation.detach().squeeze().cpu().numpy()[..., :3]*255).astype('uint8')
+            obs_img = (observation.detach().squeeze().cpu().numpy()[..., :3] * 255).astype('uint8')
             cv2.imshow("Environment", obs_img)
             cv2.waitKey(25)
         else:
@@ -183,7 +256,7 @@ class OcclusionEnv():
         image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
         self.image = image1 * image2
 
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0,3,1,2)
+        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
 
         # Calculate the silhouette loss
         loss = torch.sum((self.image[..., 3]) ** 2)

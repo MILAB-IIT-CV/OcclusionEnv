@@ -1,25 +1,27 @@
 #!/usr/bin/env sh
-# This script checks if ShapeNetCore data is downloaded and if yes, unzips it.
+# This script checks if ShapeNetCore data is downloaded to Matyi's external drive, and if yes, unzips it.
 
-# do not change this name
+#project specific output folder for data - added to gitignore to make sure it isn't available online
 dataset_dir="./data/shapenetcore"
-zip_file="ShapeNetCore.v1.zip"
+zip_dir="/Volumes/MacMiklos/M/BME"
+#/2021_12\ -\ Occlusion\ Environment/Shapenet/"
+zip_file="ShapeNetCore.v2.zip"
 
 # if you have already had the same version of dataset, you can
 # create soft link like this:
 # >> ln -s <path/to/ShapeNetCore/> shapenetcore
 
-DIR="$( cd "$(dirname "$0")" ; pwd -P )"
-cd $DIR
+cd "$zip_dir"
 
 if [ -f $zip_file ];
 then
   echo "Zip file found."
   mkdir $dataset_dir
   echo "Unzipping..."
-  unzip ShapeNetCore.v1.zip && rm -f ShapeNetCore.v1.zip
-  mv ShapeNetCore.v1/* $dataset_dir && rm -rf ShapeNetCore.v1
+  unzip ShapeNetCore.v2.zip && rm -f ShapeNetCore.v2.zip
+  mv ShapeNetCore.v2/* $dataset_dir && rm -rf ShapeNetCore.v2
   cd $dataset_dir
+  # shellcheck disable=SC2045
   for zipfile in `ls *.zip`; do unzip $zipfile; done
   cd ..
   echo "Done."
