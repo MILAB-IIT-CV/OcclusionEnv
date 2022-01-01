@@ -1,8 +1,10 @@
 import cv2
+import os
 import torch
 import torch.nn as nn
 from skimage import img_as_ubyte
 import imageio
+
 # rendering components
 from pytorch3d.renderer import (
     FoVPerspectiveCameras, look_at_view_transform, look_at_rotation,
@@ -14,6 +16,7 @@ from pytorch3d.io import load_obj
 
 # datastructures
 from pytorch3d.structures import Meshes
+from pytorch3d.datasets import ShapeNetCore
 from environment import OcclusionEnv
 import matplotlib.pyplot as plt
 
@@ -26,6 +29,19 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
 
+    # Load shapenet dataset
+
+    # From Matyi's external drive
+    #shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
+
+    # From relative path
+    shapenetdir = "./data/shapenetcore"
+
+    shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
+    print("Shapenetcore dataset loaded")
+
+    # Teapot object loader start
+    """
     # Load the obj and ignore the textures and materials.
     verts, faces_idx, _ = load_obj("./data/teapot.obj")
     faces = faces_idx.verts_idx
@@ -58,9 +74,19 @@ if __name__ == '__main__':
         faces=[faces3.to(device)],
         textures=textures3
     )
-
+    
     env = OcclusionEnv()
     obs = env.reset(meshes=[full_mesh, teapot_mesh, teapot2_mesh])
+    # teapot loader object end
+    """
+
+    # shapenet environment loader from here
+    env = OcclusionEnv(shapenet_dataset)
+    #env = OcclusionEnv()
+    print("class instantiated")
+    obs = env.reset()
+    print("env reset complete")
+    # shapenet environment loader until here
 
     action = nn.Parameter(torch.tensor([0.,0.]))
 
@@ -73,8 +99,11 @@ if __name__ == '__main__':
 
     rewards = []
     fullRewards = []
-
-    while True:
+    print("optimization start")
+    i = 0
+    while i < 200:
+        print(f"This is iteration number {i}")
+        i += 1
         if action.grad is not None:
             action.grad.zero_()
         obs, reward, finished, info = env.step(action)
