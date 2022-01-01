@@ -19,7 +19,7 @@ if __name__ == '__main__':
     if len(os.listdir(shapenetdir)) == 0:
         envs = [lambda: OcclusionEnv() for _ in range(numEnvs)]
     else:
-        shapenet_dataset = ShapeNetCore(shapenetdir)
+        shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
         envs = [lambda: OcclusionEnv(shapenet_dataset) for _ in range(numEnvs)]
 
     env = SimpleVecEnv(envs)
@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
     for i in range(numEpisodes):
 
-        obs = env.reset_shapenet()
+        obs = env.reset()
 
         running_loss = 0
 

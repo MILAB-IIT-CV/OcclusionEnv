@@ -1,10 +1,14 @@
 #!/usr/bin/env sh
-# This script checks if ShapeNetCore data is downloaded to Matyi's external drive, and if yes, unzips it.
+# This script checks if ShapeNetCore data is downloaded to the specified location, and if yes, unzips it.
 
 #project specific output folder for data - added to gitignore to make sure it isn't available online
-dataset_dir="/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
-zip_dir="/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
-#/2021_12\ -\ Occlusion\ Environment/Shapenet/"
+
+#for Matyi's external drive
+#dataset_dir="/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
+#zip_dir="/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
+
+dataset_dir="./data/shapenetcore/"
+zip_dir="./data/"
 zip_file="ShapeNetCore.v2.zip"
 
 # if you have already had the same version of dataset, you can
