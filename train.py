@@ -8,6 +8,7 @@ from torch.optim import lr_scheduler
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
+import numpy as np
 from pytorch3d.datasets import ShapeNetCore
 
 if __name__ == '__main__':

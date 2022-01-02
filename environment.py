@@ -17,7 +17,7 @@ from pytorch3d.io import load_obj
 
 # For debugging
 import warnings
-#warnings.filterwarnings("ignore")
+warnings.filterwarnings("ignore")
 
 
 # Set the cuda device
@@ -35,27 +35,34 @@ from pytorch3d.datasets import (
 )
 from torch.utils.data import DataLoader
 
+
 def load_shapenet_meshes(dataset):
     # Set "mute" to True, if no printing is necessary
-    mute = True
+    mute = False
 
     # Distance is the displacement of the farther object
     distance = 2
 
-    # Choose random index for obj#1 and obj#2
-    obj_1_index = np.random.default_rng().integers(low=len(dataset.synset_ids))
-    obj_2_index = np.random.default_rng().integers(low=len(dataset.synset_ids))
+    # Choose an object category randomly, then choose model id for that category randomly
+    object_indices = []
+    for _ in range(2):
+        category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
+        category_name = list(dataset.synset_dict.keys())[category_randn]
+
+        low_idx = dataset.synset_start_idxs[category_name]
+        high_idx = low_idx + dataset.synset_num_models[category_name]
+
+        object_indices.append(np.random.default_rng().integers(low=low_idx, high=high_idx))
 
     # initialize obj#1
-    obj_1 = dataset[obj_1_index]
+    obj_1 = dataset[object_indices[0]]
     obj_1_verts, obj_1_faces = obj_1["verts"], obj_1["faces"]
 
     if not mute:
-        print(f"object 1 index is: {obj_1_index}.")
+        print(f"object 1 index is: {object_indices[0]}.")
         print(obj_1["synset_id"])
         print("Model 1 belongs to the category " + obj_1["label"] + ".")
         print("Model 1 has model id " + obj_1["model_id"] + ".")
-
 
     # white vertices
     obj_1_textures = TexturesVertex(verts_features=torch.ones_like(obj_1_verts, device=device)[None])
@@ -65,13 +72,12 @@ def load_shapenet_meshes(dataset):
         textures=obj_1_textures
     )
 
-
     # initialize obj#2
-    obj_2 = dataset[obj_2_index]
+    obj_2 = dataset[object_indices[1]]
     obj_2_verts, obj_2_faces = obj_2["verts"] + torch.tensor([0, 0, distance]), obj_2["faces"]
 
     if not mute:
-        print(f"object 2 index is: {obj_2_index}.")
+        print(f"object 2 index is: {object_indices[1]}.")
         print(obj_2["synset_id"])
         print("Model 2 belongs to the category " + obj_2["label"] + ".")
         print("Model 2 has model id " + obj_2["model_id"] + ".")
@@ -197,7 +203,7 @@ class OcclusionEnv():
 
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
-        self.renderMode = ""#'human'
+        self.renderMode = ""  # 'human'
 
     def reset(self, radius=4.0, azimuth=0.0, elevation=0.0):
 
@@ -208,16 +214,11 @@ class OcclusionEnv():
             self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset)
 
         self.fullReward = 0
-
-        # Set camera x and y position randomly sampled from [-1 1] uniform distribution & on the z = 0 plane
-        camera_disp_x = np.random.uniform(low=-10, high=10)
-        camera_disp_y = np.random.uniform(low=-10, high=10)
-        self.camera_position = torch.tensor([camera_disp_x, camera_disp_y, 0]).to(self.device)
+        self.camera_position = torch.zeros(3).to(self.device)
 
         self.radius = torch.tensor([radius]).float().to(self.device)
         self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
-        self.azimuth = torch.tensor([azimuth]).float().to(
-            self.device)  # No rotation so the camera is positioned on the +Z axis.
+        self.azimuth = torch.tensor([azimuth]).float().to(self.device)
 
         R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, device=self.device)
 
@@ -225,7 +226,7 @@ class OcclusionEnv():
 
         return observation
 
-    def reset_default(self, meshes=load_default_meshes(), radius=4.0, azimuth=0.0, elevation=0.0):
+    def reset_default(self, meshes=load_default_meshes(), radius=4.0, azimuth=None, elevation=0.0):
 
         self.fullReward = 0
 
@@ -236,8 +237,15 @@ class OcclusionEnv():
 
         self.radius = torch.tensor([radius]).float().to(self.device)
         self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
-        self.azimuth = torch.tensor([azimuth]).float().to(
-            self.device)  # No rotation so the camera is positioned on the +Z axis.
+
+        #Initialize camera azimuth randomly from -0.5 to 0.5 radian
+        if azimuth is None:
+            azimuth_random = np.random.uniform(low=-0.5, high=0.5)
+            self.azimuth = torch.tensor([azimuth_random]).float().to(
+                self.device)
+        else:
+            self.azimuth = torch.tensor([azimuth]).float().to(
+                self.device)
 
         self.meshes = meshes
         R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, device=self.device)
