@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from skimage import img_as_ubyte
 import imageio
+import numpy as np
 
 # rendering components
 from pytorch3d.renderer import (
@@ -29,15 +30,14 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
 
+
     # Load shapenet dataset
-
-    # From Matyi's external drive
-    #shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
-
-    # From relative path
-    shapenetdir = "./data/shapenetcore"
-
-    shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
+    try:
+        # From Matyi's external drive
+        shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
+        shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
+    except:
+        shapenet_dataset = ShapeNetCore("./data/shapenetcore", version=2)
     print("Shapenetcore dataset loaded")
 
     # Teapot object loader start
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     env = OcclusionEnv(shapenet_dataset)
     #env = OcclusionEnv()
     print("class instantiated")
-    obs = env.reset()
+    obs = env.reset(azimuth=np.random.default_rng().uniform(low=-40, high=40))
     print("env reset complete")
     # shapenet environment loader until here
 
@@ -101,8 +101,8 @@ if __name__ == '__main__':
     fullRewards = []
     print("optimization start")
     i = 0
-    while i < 200:
-        print(f"This is iteration number {i}")
+    while i < 100:
+        print(i)
         i += 1
         if action.grad is not None:
             action.grad.zero_()

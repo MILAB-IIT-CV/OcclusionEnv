@@ -230,7 +230,7 @@ class SimpleVecEnv(VecEnv):
     def reset(self):
         obs_buf = []
         for env_idx in range(self.num_envs):
-            obs = self.envs[env_idx].reset()
+            obs = self.envs[env_idx].reset(azimuth=np.random.default_rng().uniform(low=-40, high=40))
             obs_buf.append(obs)
         return torch.stack(obs_buf)
 
