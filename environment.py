@@ -104,7 +104,7 @@ def load_shapenet_meshes(dataset):
 
     return [full_mesh, obj_1_mesh, obj_2_mesh]
 
-
+"""
 def load_default_meshes():
     # Load the obj and ignore the textures and materials.
     verts, faces_idx, _ = load_obj("./data/teapot.obj")
@@ -141,7 +141,7 @@ def load_default_meshes():
     )
 
     return [full_mesh, teapot_mesh, teapot2_mesh]
-
+"""
 
 class OcclusionEnv():
     def __init__(self, data=None, img_size=256):
@@ -205,7 +205,7 @@ class OcclusionEnv():
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
         self.renderMode = ""  # 'human'
 
-    def reset(self, radius=4.0, azimuth=0.0, elevation=0.0):
+    def reset(self, radius=4.0, azimuth=90.0, elevation=0.0):
 
         # Check if constructor is called with shapenet dataset, if not, call default (teapot) object mesh loader
         if self.shapenet_dataset is None:
@@ -226,7 +226,9 @@ class OcclusionEnv():
 
         return observation
 
-    def reset_default(self, meshes=load_default_meshes(), radius=4.0, azimuth=None, elevation=0.0):
+
+    """
+    def reset_default(self, meshes=load_default_meshes(), radius=4.0, azimuth=None, elevation=90.0):
 
         self.fullReward = 0
 
@@ -253,6 +255,7 @@ class OcclusionEnv():
         observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
 
         return observation
+    """
 
     def render(self):
 
