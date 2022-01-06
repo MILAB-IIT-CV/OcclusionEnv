@@ -53,7 +53,7 @@ def load_shapenet_meshes(dataset):
             category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
             category_id = list(dataset.synset_dict.keys())[category_randn]
         else:
-            category_name = "table"         # "bus" "chair" "table" "microwaves" "rifle"
+            category_name = "chair"         # "bus" "chair" "table" "microwaves" "rifle"
             category_id = dataset.synset_inv[category_name]
 
         low_idx = dataset.synset_start_idxs[category_id]
