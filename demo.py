@@ -40,7 +40,7 @@ if __name__ == '__main__':
         shapenet_dataset = ShapeNetCore("./data/shapenetcore", version=2)
     print("Shapenetcore dataset loaded")
 
-    azimuth_randn = 90 # TODO np.random.default_rng().uniform(low=-40, high=40)
+    azimuth_randn = np.pi/256   # 0,703125 deg    # TODO np.random.default_rng().uniform(low=-40, high=40)
 
     # shapenet environment loader from here
     env = OcclusionEnv(shapenet_dataset)
@@ -50,7 +50,7 @@ if __name__ == '__main__':
     print("env reset complete")
     # shapenet environment loader until here
 
-    action = nn.Parameter(torch.tensor([env.elevation, env.azimuth])) # TODO 0.,0.]))
+    action = nn.Parameter(torch.tensor([0.,0.]))
 
     filename_output = "./optimization_demo.gif"
     writer = imageio.get_writer(filename_output, mode='I', duration=0.3)
@@ -63,14 +63,13 @@ if __name__ == '__main__':
     fullRewards = []
     print("optimization start")
     i = 0
-    while i < 100:
-        print(i)
+    while True:     # TODO i < 100
+        if i % 50 == 0:
+            print(i)
         i += 1
-        print(f"azimuth is: {env.azimuth}")
         if action.grad is not None:
             action.grad.zero_()
         obs, reward, finished, info = env.step(action)
-        print(f"camera position is: {env.camera_position}")
         reward.backward()
         if torch.isnan(action.grad).any():
             print("NaN gradients detected, attempting correction")
@@ -90,6 +89,7 @@ if __name__ == '__main__':
         writer2.append_data(image)
 
         if finished:
+            print(f"finished after {i} iteration(s).")
             break
 
     plt.figure()
