@@ -40,7 +40,7 @@ if __name__ == '__main__':
         shapenet_dataset = ShapeNetCore("./data/shapenetcore", version=2)
     print("Shapenetcore dataset loaded")
 
-    azimuth_randn = np.pi/256   # 0,703125 deg    # TODO np.random.default_rng().uniform(low=-40, high=40)
+    azimuth_randn = np.pi/32   # 0,703125 deg    # TODO np.random.default_rng().uniform(low=-40, high=40)
 
     # shapenet environment loader from here
     env = OcclusionEnv(shapenet_dataset)

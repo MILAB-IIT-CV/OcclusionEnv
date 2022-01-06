@@ -37,12 +37,11 @@ from torch.utils.data import DataLoader
 
 
 def load_shapenet_meshes(dataset):
-    # Set randomize to False to only select 1 category (microwave)
+    # Set "randomize" to False to only select 1 category (category setup at line:57)
     randomize = False
 
-
     # Set "mute" to True, if no printing is necessary
-    mute = False
+    mute = True
 
     # Distance is the displacement of the farther object
     distance = 2
@@ -54,7 +53,7 @@ def load_shapenet_meshes(dataset):
             category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
             category_id = list(dataset.synset_dict.keys())[category_randn]
         else:
-            category_name = "bus"         # "table" "chair" "microwaves" "rifle"
+            category_name = "table"         # "bus" "chair" "table" "microwaves" "rifle"
             category_id = dataset.synset_inv[category_name]
 
         low_idx = dataset.synset_start_idxs[category_id]
