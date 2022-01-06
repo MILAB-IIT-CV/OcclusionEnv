@@ -30,7 +30,7 @@ if __name__ == '__main__':
     print("Shapenetcore dataset loaded")
     iterations = {}
 
-    for iteration in range(105, 311, 5):     # TODO (-310, 310, 10):
+    for iteration in range(0, 311, 5):     # TODO (-310, 310, 10):
 
         current_azimuth = iteration/3200    # [-100pi; 100pi] -> [-3,1/32; 3,1/32]
 
@@ -46,9 +46,9 @@ if __name__ == '__main__':
         except:
             pass
 
-        # initialize writer
-        filename_output = os.path.join(output_path + "/" + str(current_azimuth) + "_optimization_demo.gif")
-        writer = imageio.get_writer(filename_output, mode='I', duration=0.3)
+        # initialize image writer
+        # filename_output = os.path.join(output_path + "/" + str(current_azimuth) + "_optimization_demo.gif")
+        # writer = imageio.get_writer(filename_output, mode='I', duration=0.3)
 
         action = nn.Parameter(torch.tensor([0., 0.]))
         lr = 1e-6
@@ -74,12 +74,12 @@ if __name__ == '__main__':
             rewards.append(reward.cpu().item())
             fullRewards.append(info['full_reward'].cpu().item())
 
-            image = obs[0].detach().permute(1,2,0).cpu().numpy()
-            image = img_as_ubyte(image)
-            writer.append_data(image)
-
-            image = info['full_state'][0, ..., 3].detach().squeeze().cpu().numpy()
-            image = img_as_ubyte(image)
+            # image = obs[0].detach().permute(1,2,0).cpu().numpy()
+            # image = img_as_ubyte(image)
+            # writer.append_data(image)
+            #
+            # image = info['full_state'][0, ..., 3].detach().squeeze().cpu().numpy()
+            # image = img_as_ubyte(image)
 
             if finished:
                 print(f"finished after {i} iteration(s).")
