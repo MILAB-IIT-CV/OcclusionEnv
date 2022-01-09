@@ -37,8 +37,11 @@ from torch.utils.data import DataLoader
 
 
 def load_shapenet_meshes(dataset):
+    # Set "randomize" to False to only select 1 category (category setup at line:57)
+    randomize = False
+
     # Set "mute" to True, if no printing is necessary
-    mute = False
+    mute = True
 
     # Distance is the displacement of the farther object
     distance = 2
@@ -46,11 +49,19 @@ def load_shapenet_meshes(dataset):
     # Choose an object category randomly, then choose model id for that category randomly
     object_indices = []
     for _ in range(2):
-        category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
-        category_name = list(dataset.synset_dict.keys())[category_randn]
+        if randomize:
+            category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
+            category_id = list(dataset.synset_dict.keys())[category_randn]
+        else:
+            category_name = "chair"         # "bus" "chair" "table" "microwaves" "rifle"
+            category_id = dataset.synset_inv[category_name]
 
-        low_idx = dataset.synset_start_idxs[category_name]
-        high_idx = low_idx + dataset.synset_num_models[category_name]
+        low_idx = dataset.synset_start_idxs[category_id]
+
+        if randomize:
+            high_idx = low_idx + dataset.synset_num_models[category_id]
+        else:
+            high_idx = low_idx + 1
 
         object_indices.append(np.random.default_rng().integers(low=low_idx, high=high_idx))
 
@@ -105,43 +116,42 @@ def load_shapenet_meshes(dataset):
     return [full_mesh, obj_1_mesh, obj_2_mesh]
 
 
-def load_default_meshes():
-    # Load the obj and ignore the textures and materials.
-    verts, faces_idx, _ = load_obj("./data/teapot.obj")
-    faces = faces_idx.verts_idx
+    def load_default_meshes():
+        # Load the obj and ignore the textures and materials.
+        verts, faces_idx, _ = load_obj("./data/teapot.obj")
+        faces = faces_idx.verts_idx
 
-    # Initialize each vertex to be white in color.
-    verts_rgb = torch.ones_like(verts)[None]  # (1, V, 3)
-    textures = TexturesVertex(verts_features=verts_rgb.to(device))
+        # Initialize each vertex to be white in color.
+        verts_rgb = torch.ones_like(verts)[None]  # (1, V, 3)
+        textures = TexturesVertex(verts_features=verts_rgb.to(device))
 
-    verts2 = verts + torch.tensor([0, 0, 2.0])
+        verts2 = verts + torch.tensor([0, 0, 2.0])
 
-    verts3 = torch.vstack([verts, verts2])
-    faces3 = torch.vstack([faces, faces + verts.shape[0]])
+        verts3 = torch.vstack([verts, verts2])
+        faces3 = torch.vstack([faces, faces + verts.shape[0]])
 
-    # Initialize each vertex to be white in color.
-    verts_rgb3 = torch.ones_like(verts3)[None]  # (1, V, 3)
-    textures3 = TexturesVertex(verts_features=verts_rgb3.to(device))
+        # Initialize each vertex to be white in color.
+        verts_rgb3 = torch.ones_like(verts3)[None]  # (1, V, 3)
+        textures3 = TexturesVertex(verts_features=verts_rgb3.to(device))
 
-    # Create a Meshes object for the teapot. Here we have only one mesh in the batch.
-    teapot_mesh = Meshes(
-        verts=[verts.to(device)],
-        faces=[faces.to(device)],
-        textures=textures
-    )
-    teapot2_mesh = Meshes(
-        verts=[verts2.to(device)],
-        faces=[faces.to(device)],
-        textures=textures
-    )
-    full_mesh = Meshes(
-        verts=[verts3.to(device)],
-        faces=[faces3.to(device)],
-        textures=textures3
-    )
+        # Create a Meshes object for the teapot. Here we have only one mesh in the batch.
+        teapot_mesh = Meshes(
+            verts=[verts.to(device)],
+            faces=[faces.to(device)],
+            textures=textures
+        )
+        teapot2_mesh = Meshes(
+            verts=[verts2.to(device)],
+            faces=[faces.to(device)],
+            textures=textures
+        )
+        full_mesh = Meshes(
+            verts=[verts3.to(device)],
+            faces=[faces3.to(device)],
+            textures=textures3
+        )
 
-    return [full_mesh, teapot_mesh, teapot2_mesh]
-
+        return [full_mesh, teapot_mesh, teapot2_mesh]
 
 class OcclusionEnv():
     def __init__(self, data=None, img_size=256):
@@ -205,28 +215,26 @@ class OcclusionEnv():
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
         self.renderMode = ""  # 'human'
 
-    def reset(self, radius=4.0, azimuth=0.0, elevation=0.0):
+    def reset(self, radius=4.0, azimuth=90.0, elevation=0.0):
 
-        # Check if constructor is called with shapenet dataset, if not, call default (teapot) object mesh loader
-        if self.shapenet_dataset is None:
-            self.meshes = load_default_meshes()
-        else:
-            self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset)
+        self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset)
 
         self.fullReward = 0
         self.camera_position = torch.zeros(3).to(self.device)
 
         self.radius = torch.tensor([radius]).float().to(self.device)
         self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
-        self.azimuth = torch.tensor([azimuth]).float().to(self.device)
+        self.azimuth = torch.tensor([azimuth]).float().to(self.device) # angle of elevation in degrees
 
-        R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, device=self.device)
+        R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, degrees=False, device=self.device)
 
         observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
 
         return observation
 
-    def reset_default(self, meshes=load_default_meshes(), radius=4.0, azimuth=None, elevation=0.0):
+
+    """
+    def reset_default(self, meshes=load_default_meshes(), radius=4.0, azimuth=None, elevation=90.0):
 
         self.fullReward = 0
 
@@ -253,6 +261,7 @@ class OcclusionEnv():
         observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
 
         return observation
+    """
 
     def render(self):
 
@@ -274,9 +283,9 @@ class OcclusionEnv():
         self.elevation += action[0]
         self.azimuth += action[1]
 
-        self.camera_position[0] = self.radius * torch.sin(self.elevation) * torch.cos(self.azimuth)
-        self.camera_position[1] = self.radius * torch.sin(self.elevation) * torch.sin(self.azimuth)
-        self.camera_position[2] = self.radius * torch.cos(self.elevation)
+        self.camera_position[0] = self.radius * torch.sin(self.azimuth) * torch.cos(self.elevation)
+        self.camera_position[1] = self.radius * torch.sin(self.azimuth) * torch.sin(self.elevation)
+        self.camera_position[2] = self.radius * torch.cos(self.azimuth)
 
         R = look_at_rotation(self.camera_position[None, :], device=self.device)  # (1, 3, 3)
         T = -torch.bmm(R.transpose(1, 2), self.camera_position[None, :, None])[:, :, 0]  # (1, 3)
@@ -285,7 +294,7 @@ class OcclusionEnv():
         image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
         self.image = image1 * image2
 
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
+        observation = None # TODO self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
 
         # Calculate the silhouette loss
         loss = torch.sum((self.image[..., 3]) ** 2)

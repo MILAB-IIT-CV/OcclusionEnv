@@ -40,59 +40,21 @@ if __name__ == '__main__':
         shapenet_dataset = ShapeNetCore("./data/shapenetcore", version=2)
     print("Shapenetcore dataset loaded")
 
-    # Teapot object loader start
-    """
-    # Load the obj and ignore the textures and materials.
-    verts, faces_idx, _ = load_obj("./data/teapot.obj")
-    faces = faces_idx.verts_idx
-
-    # Initialize each vertex to be white in color.
-    verts_rgb = torch.ones_like(verts)[None]  # (1, V, 3)
-    textures = TexturesVertex(verts_features=verts_rgb.to(device))
-
-    verts2 = verts + torch.tensor([0, 0, 2.0])
-
-    verts3 = torch.vstack([verts, verts2])
-    faces3 = torch.vstack([faces, faces + verts.shape[0]])
-    # Initialize each vertex to be white in color.
-    verts_rgb3 = torch.ones_like(verts3)[None]  # (1, V, 3)
-    textures3 = TexturesVertex(verts_features=verts_rgb3.to(device))
-
-    # Create a Meshes object for the teapot. Here we have only one mesh in the batch.
-    teapot_mesh = Meshes(
-        verts=[verts.to(device)],
-        faces=[faces.to(device)],
-        textures=textures
-    )
-    teapot2_mesh = Meshes(
-        verts=[verts2.to(device)],
-        faces=[faces.to(device)],
-        textures=textures
-    )
-    full_mesh = Meshes(
-        verts=[verts3.to(device)],
-        faces=[faces3.to(device)],
-        textures=textures3
-    )
-    
-    env = OcclusionEnv()
-    obs = env.reset(meshes=[full_mesh, teapot_mesh, teapot2_mesh])
-    # teapot loader object end
-    """
+    azimuth_randn = np.pi/32   # 0,703125 deg    # TODO np.random.default_rng().uniform(low=-40, high=40)
 
     # shapenet environment loader from here
     env = OcclusionEnv(shapenet_dataset)
-    #env = OcclusionEnv()
     print("class instantiated")
-    obs = env.reset(azimuth=np.random.default_rng().uniform(low=-40, high=40))
+    obs = env.reset(azimuth=azimuth_randn)
+    print(f"env.azimuth is {env.azimuth}")
     print("env reset complete")
     # shapenet environment loader until here
 
     action = nn.Parameter(torch.tensor([0.,0.]))
 
-    filename_output = "./teapot_optimization_demo.gif"
+    filename_output = "./optimization_demo.gif"
     writer = imageio.get_writer(filename_output, mode='I', duration=0.3)
-    filename_output = "./teapot_optimization_demo_occl.gif"
+    filename_output = "./optimization_demo_occl.gif"
     writer2 = imageio.get_writer(filename_output, mode='I', duration=0.3)
 
     lr = 1e-6
@@ -101,8 +63,9 @@ if __name__ == '__main__':
     fullRewards = []
     print("optimization start")
     i = 0
-    while i < 100:
-        print(i)
+    while True:     # TODO i < 100
+        if i % 50 == 0:
+            print(i)
         i += 1
         if action.grad is not None:
             action.grad.zero_()
@@ -126,6 +89,7 @@ if __name__ == '__main__':
         writer2.append_data(image)
 
         if finished:
+            print(f"finished after {i} iteration(s).")
             break
 
     plt.figure()
