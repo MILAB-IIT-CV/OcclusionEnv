@@ -12,6 +12,9 @@ pytorch3d version 0.6.1 required, do
 
 or run
 
-`docker pull gaetanlandreau/pytorch3d` <
+`docker pull gaetanlandreau/pytorch3d`
+
 `sudo docker run --gpus all -it --rm -v ~/occlusionenv:/occlusionenv -w /occlusionenv gaetanlandreau/pytorch3d`
+`bash setup_docker.sh`
+
 `bash setup_docker.sh`
