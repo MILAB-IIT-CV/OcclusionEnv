@@ -30,7 +30,7 @@ if __name__ == '__main__':
     print("Shapenetcore dataset loaded")
     iterations = {}
 
-    for iteration in range(0, 311, 5):     # TODO (-310, 310, 10):
+    for iteration in range(-310, 310, 10):
 
         current_azimuth = iteration/3200    # [-100pi; 100pi] -> [-3,1/32; 3,1/32]
 
@@ -57,7 +57,7 @@ if __name__ == '__main__':
         print(f"Optimization start. Current azimuth value: {current_azimuth}")
 
         i = 0
-        while True:     # TODO i < 100
+        while True:
             if i % 50 == 0:
                 print(i)
             i += 1

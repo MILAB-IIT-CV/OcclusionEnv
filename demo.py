@@ -40,15 +40,17 @@ if __name__ == '__main__':
         shapenet_dataset = ShapeNetCore("./data/shapenetcore", version=2)
     print("Shapenetcore dataset loaded")
 
-    azimuth_randn = np.pi/32   # 0,703125 deg    # TODO np.random.default_rng().uniform(low=-40, high=40)
+    azimuth_randn = np.pi/32   # 0,703125 deg
 
-    # shapenet environment loader from here
+    #azimuth_randn np.random.default_rng().uniform(low=-np.pi/32, high=np.pi/32)
+
+    # Shapenet environment loader from here
     env = OcclusionEnv(shapenet_dataset)
     print("class instantiated")
     obs = env.reset(azimuth=azimuth_randn)
     print(f"env.azimuth is {env.azimuth}")
     print("env reset complete")
-    # shapenet environment loader until here
+    # Shapenet environment loader until here
 
     action = nn.Parameter(torch.tensor([0.,0.]))
 
@@ -63,7 +65,7 @@ if __name__ == '__main__':
     fullRewards = []
     print("optimization start")
     i = 0
-    while True:     # TODO i < 100
+    while True:
         if i % 50 == 0:
             print(i)
         i += 1

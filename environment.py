@@ -294,7 +294,7 @@ class OcclusionEnv():
         image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
         self.image = image1 * image2
 
-        observation = None # TODO self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
+        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
 
         # Calculate the silhouette loss
         loss = torch.sum((self.image[..., 3]) ** 2)
