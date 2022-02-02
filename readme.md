@@ -15,6 +15,7 @@ or run
 `docker pull gaetanlandreau/pytorch3d`
 
 `sudo docker run --gpus all -it --rm -v ~/occlusionenv:/occlusionenv -w /occlusionenv gaetanlandreau/pytorch3d`
-`bash setup_docker.sh`
+
+Note: change ~/occlusionenv to the location where you cloned this repo.
 
 `bash setup_docker.sh`
