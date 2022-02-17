@@ -15,10 +15,10 @@ from pytorch3d.renderer import (
 from pytorch3d.structures import Meshes
 from pytorch3d.io import load_obj
 
-# For debugging
+# For debugging comment the following lines
 import warnings
-warnings.filterwarnings("ignore")
 
+warnings.filterwarnings("ignore")
 
 # Set the cuda device
 if torch.cuda.is_available():
@@ -53,7 +53,7 @@ def load_shapenet_meshes(dataset):
             category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
             category_id = list(dataset.synset_dict.keys())[category_randn]
         else:
-            category_name = "chair"         # "bus" "chair" "table" "microwaves" "rifle"
+            category_name = "plane"  # "bus" "chair" "table" "microwaves" "rifle" "chair"
             category_id = dataset.synset_inv[category_name]
 
         low_idx = dataset.synset_start_idxs[category_id]
@@ -116,43 +116,6 @@ def load_shapenet_meshes(dataset):
     return [full_mesh, obj_1_mesh, obj_2_mesh]
 
 
-    def load_default_meshes():
-        # Load the obj and ignore the textures and materials.
-        verts, faces_idx, _ = load_obj("./data/teapot.obj")
-        faces = faces_idx.verts_idx
-
-        # Initialize each vertex to be white in color.
-        verts_rgb = torch.ones_like(verts)[None]  # (1, V, 3)
-        textures = TexturesVertex(verts_features=verts_rgb.to(device))
-
-        verts2 = verts + torch.tensor([0, 0, 2.0])
-
-        verts3 = torch.vstack([verts, verts2])
-        faces3 = torch.vstack([faces, faces + verts.shape[0]])
-
-        # Initialize each vertex to be white in color.
-        verts_rgb3 = torch.ones_like(verts3)[None]  # (1, V, 3)
-        textures3 = TexturesVertex(verts_features=verts_rgb3.to(device))
-
-        # Create a Meshes object for the teapot. Here we have only one mesh in the batch.
-        teapot_mesh = Meshes(
-            verts=[verts.to(device)],
-            faces=[faces.to(device)],
-            textures=textures
-        )
-        teapot2_mesh = Meshes(
-            verts=[verts2.to(device)],
-            faces=[faces.to(device)],
-            textures=textures
-        )
-        full_mesh = Meshes(
-            verts=[verts3.to(device)],
-            faces=[faces3.to(device)],
-            textures=textures3
-        )
-
-        return [full_mesh, teapot_mesh, teapot2_mesh]
-
 class OcclusionEnv():
     def __init__(self, data=None, img_size=256):
         super().__init__()
@@ -184,13 +147,14 @@ class OcclusionEnv():
             image_size=img_size,
             blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
             faces_per_pixel=100,
+            #cull_backfaces=True,
         )
 
         # Create a silhouette mesh renderer by composing a rasterizer and a shader.
         self.silhouette_renderer = MeshRenderer(
             rasterizer=MeshRasterizer(
                 cameras=cameras,
-                raster_settings=raster_settings
+                raster_settings=raster_settings,
             ),
             shader=SoftSilhouetteShader(blend_params=blend_params)
         )
@@ -200,6 +164,7 @@ class OcclusionEnv():
             image_size=img_size,
             blur_radius=0.0,
             faces_per_pixel=1,
+            #cull_backfaces=True
         )
         # We can add a point light in front of the object.
         lights = PointLights(device=self.device, location=((2.0, 2.0, -2.0),))
@@ -209,6 +174,7 @@ class OcclusionEnv():
                 raster_settings=raster_settings
             ),
             shader=HardPhongShader(device=self.device, cameras=cameras, lights=lights)
+            #shader=HardFlatShader(device=self.device, cameras=cameras, lights=lights)
         )
 
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
@@ -224,44 +190,13 @@ class OcclusionEnv():
 
         self.radius = torch.tensor([radius]).float().to(self.device)
         self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
-        self.azimuth = torch.tensor([azimuth]).float().to(self.device) # angle of elevation in degrees
+        self.azimuth = torch.tensor([azimuth]).float().to(self.device)  # angle of elevation in degrees
 
         R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, degrees=False, device=self.device)
 
         observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
 
         return observation
-
-
-    """
-    def reset_default(self, meshes=load_default_meshes(), radius=4.0, azimuth=None, elevation=90.0):
-
-        self.fullReward = 0
-
-        # Set cameare x and y position randomly sampled from [-1 1] uniform distribution & on the z = 0 plane
-        camera_disp_x = np.random.uniform(low=-1, high=1)
-        camera_disp_y = np.random.uniform(low=-1, high=1)
-        self.camera_position = torch.tensor([camera_disp_x, camera_disp_y, 0]).to(self.device)
-
-        self.radius = torch.tensor([radius]).float().to(self.device)
-        self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
-
-        #Initialize camera azimuth randomly from -0.5 to 0.5 radian
-        if azimuth is None:
-            azimuth_random = np.random.uniform(low=-0.5, high=0.5)
-            self.azimuth = torch.tensor([azimuth_random]).float().to(
-                self.device)
-        else:
-            self.azimuth = torch.tensor([azimuth]).float().to(
-                self.device)
-
-        self.meshes = meshes
-        R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, device=self.device)
-
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
-
-        return observation
-    """
 
     def render(self):
 
