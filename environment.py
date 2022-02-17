@@ -206,7 +206,7 @@ class OcclusionEnv():
         observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
 
         if self.renderMode == 'human':
-            obs_img = (observation.detach().squeeze().cpu().numpy()[..., :3] * 255).astype('uint8')
+            obs_img = (observation.detach().squeeze().cpu().numpy()[..., :3] * 255)#.astype('uint8')
             cv2.imshow("Environment", obs_img)
             cv2.waitKey(25)
         else:
