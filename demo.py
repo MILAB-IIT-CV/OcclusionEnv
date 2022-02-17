@@ -37,10 +37,11 @@ if __name__ == '__main__':
         shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
         shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
     except:
-        shapenet_dataset = ShapeNetCore("./data/shapenetcore", version=2)
+        shapenet_dataset = ShapeNetCore("./data/shapenet/shapenetcore", version=2)
     print("Shapenetcore dataset loaded")
 
-    azimuth_randn = np.pi/32   # 0,703125 deg
+    azimuth_randn = np.pi/32   # 5,625 deg
+    azimuth_randn = np.pi/2      # 90 deg
 
     #azimuth_randn np.random.default_rng().uniform(low=-np.pi/32, high=np.pi/32)
 
@@ -66,8 +67,7 @@ if __name__ == '__main__':
     print("optimization start")
     i = 0
     while True:
-        if i % 50 == 0:
-            print(i)
+        print(i)
         i += 1
         if action.grad is not None:
             action.grad.zero_()

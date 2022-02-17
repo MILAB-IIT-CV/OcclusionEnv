@@ -11,6 +11,7 @@ from pytorch3d.renderer import (
     FoVPerspectiveCameras, look_at_view_transform, look_at_rotation,
     RasterizationSettings, MeshRenderer, MeshRasterizer, BlendParams,
     SoftSilhouetteShader, HardPhongShader, PointLights, TexturesVertex,
+    HardFlatShader
 )
 from pytorch3d.structures import Meshes
 from pytorch3d.io import load_obj
@@ -53,7 +54,7 @@ def load_shapenet_meshes(dataset):
             category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
             category_id = list(dataset.synset_dict.keys())[category_randn]
         else:
-            category_name = "plane"  # "bus" "chair" "table" "microwaves" "rifle" "chair"
+            category_name = "chair"  # "bus" "chair" "table" "microwaves" "rifle" "chair"
             category_id = dataset.synset_inv[category_name]
 
         low_idx = dataset.synset_start_idxs[category_id]
@@ -147,7 +148,7 @@ class OcclusionEnv():
             image_size=img_size,
             blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
             faces_per_pixel=100,
-            #cull_backfaces=True,
+            cull_backfaces=True,
         )
 
         # Create a silhouette mesh renderer by composing a rasterizer and a shader.
@@ -164,7 +165,7 @@ class OcclusionEnv():
             image_size=img_size,
             blur_radius=0.0,
             faces_per_pixel=1,
-            #cull_backfaces=True
+            cull_backfaces=True
         )
         # We can add a point light in front of the object.
         lights = PointLights(device=self.device, location=((2.0, 2.0, -2.0),))
@@ -173,8 +174,8 @@ class OcclusionEnv():
                 cameras=cameras,
                 raster_settings=raster_settings
             ),
-            shader=HardPhongShader(device=self.device, cameras=cameras, lights=lights)
-            #shader=HardFlatShader(device=self.device, cameras=cameras, lights=lights)
+            #shader=HardPhongShader(device=self.device, cameras=cameras, lights=lights)
+            shader=HardFlatShader(device=self.device, cameras=cameras, lights=lights)
         )
 
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))

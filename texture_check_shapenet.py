@@ -34,7 +34,7 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
 
-    SHAPENET_PATH = "./data/shapenet/shapenetcore"
+    SHAPENET_PATH = "data/shapenetcore"
     shapenet_dataset = ShapeNetCore(SHAPENET_PATH, version=2)
 
     print("DEBUG: dataset load complete")
