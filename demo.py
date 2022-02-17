@@ -30,20 +30,23 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
 
-
     # Load shapenet dataset
     try:
         # From Matyi's external drive
         shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
         shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
     except:
-        shapenet_dataset = ShapeNetCore("./data/shapenet/shapenetcore", version=2)
+        try:
+            shapenet_dataset = ShapeNetCore("./data/shapenet/shapenetcore", version=2)
+        except:
+            shapenet_dataset = ShapeNetCore("/data/shapenet/shapenetcore", version=2)
+
     print("Shapenetcore dataset loaded")
 
-    azimuth_randn = np.pi/32   # 5,625 deg
-    azimuth_randn = np.pi/2      # 90 deg
+    azimuth_randn = np.pi / 32  # 5,625 deg
+    #azimuth_randn = np.pi / 2  # 90 deg
 
-    #azimuth_randn np.random.default_rng().uniform(low=-np.pi/32, high=np.pi/32)
+    # azimuth_randn np.random.default_rng().uniform(low=-np.pi/32, high=np.pi/32)
 
     # Shapenet environment loader from here
     env = OcclusionEnv(shapenet_dataset)
@@ -53,7 +56,7 @@ if __name__ == '__main__':
     print("env reset complete")
     # Shapenet environment loader until here
 
-    action = nn.Parameter(torch.tensor([0.,0.]))
+    action = nn.Parameter(torch.tensor([0., 0.]))
 
     filename_output = "./optimization_demo.gif"
     writer = imageio.get_writer(filename_output, mode='I', duration=0.3)
@@ -82,7 +85,7 @@ if __name__ == '__main__':
         rewards.append(reward.cpu().item())
         fullRewards.append(info['full_reward'].cpu().item())
 
-        image = obs[0].detach().permute(1,2,0).cpu().numpy()
+        image = obs[0].detach().permute(1, 2, 0).cpu().numpy()
         image = img_as_ubyte(image)
         writer.append_data(image)
 

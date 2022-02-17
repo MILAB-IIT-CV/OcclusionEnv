@@ -39,10 +39,10 @@ from torch.utils.data import DataLoader
 
 def load_shapenet_meshes(dataset):
     # Set "randomize" to False to only select 1 category (category setup at line:57)
-    randomize = False
+    randomize = True
 
     # Set "mute" to True, if no printing is necessary
-    mute = True
+    mute = False
 
     # Distance is the displacement of the farther object
     distance = 2
@@ -95,7 +95,7 @@ def load_shapenet_meshes(dataset):
         print("Model 2 has model id " + obj_2["model_id"] + ".")
 
     # white vertices
-    obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts, device=device)[None])
+    obj_2_textures = TexturesVertex()#verts_features=torch.ones_like(obj_2_verts,device=device)[None])
     obj_2_mesh = Meshes(
         verts=[obj_2_verts.to(device)],
         faces=[obj_2_faces.to(device)],
