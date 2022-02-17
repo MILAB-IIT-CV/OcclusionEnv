@@ -95,7 +95,7 @@ def load_shapenet_meshes(dataset):
         print("Model 2 has model id " + obj_2["model_id"] + ".")
 
     # white vertices
-    obj_2_textures = TexturesVertex()#verts_features=torch.ones_like(obj_2_verts,device=device)[None])
+    obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts,device=device)[None])
     obj_2_mesh = Meshes(
         verts=[obj_2_verts.to(device)],
         faces=[obj_2_faces.to(device)],
