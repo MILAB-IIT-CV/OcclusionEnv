@@ -39,7 +39,7 @@ from torch.utils.data import DataLoader
 
 def load_shapenet_meshes(dataset):
     # Set "randomize" to False to only select 1 category (category setup at line:57)
-    randomize = True
+    randomize = False
 
     # Set "mute" to True, if no printing is necessary
     mute = False
@@ -54,7 +54,7 @@ def load_shapenet_meshes(dataset):
             category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
             category_id = list(dataset.synset_dict.keys())[category_randn]
         else:
-            category_name = "chair"  # "bus" "chair" "table" "microwaves" "rifle" "chair"
+            category_name = "airplane"  # "bus" "chair" "table" "microwaves" "rifle" "chair" "airplane"
             category_id = dataset.synset_inv[category_name]
 
         low_idx = dataset.synset_start_idxs[category_id]
@@ -95,7 +95,7 @@ def load_shapenet_meshes(dataset):
         print("Model 2 has model id " + obj_2["model_id"] + ".")
 
     # white vertices
-    obj_2_textures = TexturesVertex()#verts_features=torch.ones_like(obj_2_verts,device=device)[None])
+    obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts,device=device)[None])
     obj_2_mesh = Meshes(
         verts=[obj_2_verts.to(device)],
         faces=[obj_2_faces.to(device)],
@@ -182,7 +182,7 @@ class OcclusionEnv():
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
         self.renderMode = ""  # 'human'
 
-    def reset(self, radius=4.0, azimuth=90.0, elevation=0.0):
+    def reset(self, radius=1.0, azimuth=90.0, elevation=0.0):
 
         self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset)
 
@@ -206,7 +206,7 @@ class OcclusionEnv():
         observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
 
         if self.renderMode == 'human':
-            obs_img = (observation.detach().squeeze().cpu().numpy()[..., :3] * 255).astype('uint8')
+            obs_img = (observation.detach().squeeze().cpu().numpy()[..., :3])# * 255).astype('uint8')
             cv2.imshow("Environment", obs_img)
             cv2.waitKey(25)
         else:

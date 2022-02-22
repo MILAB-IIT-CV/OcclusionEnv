@@ -44,7 +44,7 @@ if __name__ == '__main__':
     print("Shapenetcore dataset loaded")
 
     azimuth_randn = np.pi / 32  # 5,625 deg
-    #azimuth_randn = np.pi / 2  # 90 deg
+    azimuth_randn = np.pi / 2  # 90 deg
 
     # azimuth_randn np.random.default_rng().uniform(low=-np.pi/32, high=np.pi/32)
 
