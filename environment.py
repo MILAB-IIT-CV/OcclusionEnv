@@ -13,7 +13,7 @@ from pytorch3d.renderer import (
     SoftSilhouetteShader, HardPhongShader, PointLights, TexturesVertex,
     HardFlatShader
 )
-from pytorch3d.structures import Meshes
+import pytorch3d.structures as structures
 from pytorch3d.io import load_obj
 
 # For debugging comment the following lines
@@ -70,6 +70,12 @@ def load_shapenet_meshes(dataset):
     obj_1 = dataset[object_indices[0]]
     obj_1_verts, obj_1_faces = obj_1["verts"], obj_1["faces"]
 
+    # Check if texture is available for the model, if not, make vertices white
+    if obj_1["textures"] is not None:
+        obj_1_textures = obj_1["textures"]
+    else:
+        obj_1_textures = TexturesVertex(verts_features=torch.ones_like(obj_1_verts, device=device)[None])
+
     if not mute:
         print(f"object 1 index is: {object_indices[0]}.")
         print(obj_1["synset_id"])
@@ -78,7 +84,8 @@ def load_shapenet_meshes(dataset):
 
     # white vertices
     #obj_1_textures = TexturesVertex(verts_features=torch.ones_like(obj_1_verts, device=device)[None])
-    obj_1_mesh = Meshes(
+
+    obj_1_mesh = structures.Meshes(
         verts=[obj_1_verts.to(device)],
         faces=[obj_1_faces.to(device)],
         textures=obj_1_textures
@@ -88,6 +95,12 @@ def load_shapenet_meshes(dataset):
     obj_2 = dataset[object_indices[1]]
     obj_2_verts, obj_2_faces = obj_2["verts"] + torch.tensor([0, 0, distance]), obj_2["faces"]
 
+    # Check if texture is available for the model, if not, make vertices white
+    if obj_2["textures"] is not None:
+        obj_2_textures = obj_1["textures"]
+    else:
+        obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts, device=device)[None])
+
     if not mute:
         print(f"object 2 index is: {object_indices[1]}.")
         print(obj_2["synset_id"])
@@ -96,7 +109,7 @@ def load_shapenet_meshes(dataset):
 
     # white vertices
     #obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts,device=device)[None])
-    obj_2_mesh = Meshes(
+    obj_2_mesh = structures.Meshes(
         verts=[obj_2_verts.to(device)],
         faces=[obj_2_faces.to(device)],
         textures=obj_2_textures
@@ -107,9 +120,9 @@ def load_shapenet_meshes(dataset):
 
     # Initialize each vertex to be white in color.
     #textures3 = TexturesVertex(verts_features=torch.ones_like(verts3, device=device)[None])
-    textures3 = join_meshes_as_scene([obj_1_mesh, obj_2_mesh])
+    textures3 = structures.join_meshes_as_scene([obj_1_mesh, obj_2_mesh])
 
-    full_mesh = Meshes(
+    full_mesh = structures.Meshes(
         verts=[verts3.to(device)],
         faces=[faces3.to(device)],
         textures=textures3
@@ -134,8 +147,7 @@ class OcclusionEnv():
         self.shapenet_dataset = data
 
         # Initialize a perspective camera.
-        #cameras = FoVPerspectiveCameras(device=self.device)
-        cameras = OpenGLPerspectiveCameras(device=self.device)
+        cameras = FoVPerspectiveCameras(device=self.device)
 
         # To blend the 100 faces we set a few parameters which control the opacity and the sharpness of
         # edges. Refer to blending.py for more details.
@@ -186,7 +198,7 @@ class OcclusionEnv():
 
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
-        self.renderMode = 'human'
+        self.renderMode = "" #'human'
 
     def reset(self, radius=1.0, azimuth=90.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
