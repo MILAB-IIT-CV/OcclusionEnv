@@ -103,13 +103,12 @@ if __name__ == '__main__':
     R, T = look_at_view_transform(1.0, 1.0, 270)
     cameras = OpenGLPerspectiveCameras(R=R, T=T, device=device)
     raster_settings = RasterizationSettings(image_size=512, cull_backfaces=True)
-    lights = PointLights(location=torch.tensor([0.0, 1.0, -2.0], device=device)[None], device=device)
+    lights = PointLights(location=torch.tensor([2.0, 2.0, -2.0], device=device)[None], device=device)
 
 
     images_by_model_ids = shapenet_dataset.render(
         model_ids=[
-            "2d7562f5bf2c7f2da1d85548168d6015",
-            "2d7562f5bf2c7f2da1d85548168d6015",
+            "2d7562f5bf2c7f2da1d85548168d6015"
         ],
         device=device,
         cameras=cameras,
@@ -118,7 +117,8 @@ if __name__ == '__main__':
         shader_type=HardFlatShader
     )
 
-    image_grid(images_by_model_ids.cpu().numpy(), rows=1, cols=3, rgb=True)
+    # image_grid(images_by_model_ids.cpu().numpy(), rows=1, cols=3, rgb=True)
+
 
     print('DEBUG: render complete')
 

@@ -8,7 +8,7 @@ import os
 
 # rendering components
 from pytorch3d.renderer import (
-    FoVPerspectiveCameras, look_at_view_transform, look_at_rotation,
+    FoVPerspectiveCameras, OpenGLPerspectiveCameras, look_at_view_transform, look_at_rotation,
     RasterizationSettings, MeshRenderer, MeshRasterizer, BlendParams,
     SoftSilhouetteShader, HardPhongShader, PointLights, TexturesVertex,
     HardFlatShader
@@ -77,7 +77,7 @@ def load_shapenet_meshes(dataset):
         print("Model 1 has model id " + obj_1["model_id"] + ".")
 
     # white vertices
-    obj_1_textures = TexturesVertex(verts_features=torch.ones_like(obj_1_verts, device=device)[None])
+    #obj_1_textures = TexturesVertex(verts_features=torch.ones_like(obj_1_verts, device=device)[None])
     obj_1_mesh = Meshes(
         verts=[obj_1_verts.to(device)],
         faces=[obj_1_faces.to(device)],
@@ -95,7 +95,7 @@ def load_shapenet_meshes(dataset):
         print("Model 2 has model id " + obj_2["model_id"] + ".")
 
     # white vertices
-    obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts,device=device)[None])
+    #obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts,device=device)[None])
     obj_2_mesh = Meshes(
         verts=[obj_2_verts.to(device)],
         faces=[obj_2_faces.to(device)],
@@ -106,7 +106,8 @@ def load_shapenet_meshes(dataset):
     faces3 = torch.vstack([obj_1_faces, obj_2_faces + obj_1_verts.shape[0]])
 
     # Initialize each vertex to be white in color.
-    textures3 = TexturesVertex(verts_features=torch.ones_like(verts3, device=device)[None])
+    #textures3 = TexturesVertex(verts_features=torch.ones_like(verts3, device=device)[None])
+    textures3 = join_meshes_as_scene([obj_1_mesh, obj_2_mesh])
 
     full_mesh = Meshes(
         verts=[verts3.to(device)],
@@ -118,7 +119,7 @@ def load_shapenet_meshes(dataset):
 
 
 class OcclusionEnv():
-    def __init__(self, data=None, img_size=256):
+    def __init__(self, data=None, img_size=512):
         super().__init__()
 
         self.metadata = "Blablabla"
@@ -133,7 +134,8 @@ class OcclusionEnv():
         self.shapenet_dataset = data
 
         # Initialize a perspective camera.
-        cameras = FoVPerspectiveCameras(device=self.device)
+        #cameras = FoVPerspectiveCameras(device=self.device)
+        cameras = OpenGLPerspectiveCameras(device=self.device)
 
         # To blend the 100 faces we set a few parameters which control the opacity and the sharpness of
         # edges. Refer to blending.py for more details.
@@ -172,17 +174,21 @@ class OcclusionEnv():
         self.phong_renderer = MeshRenderer(
             rasterizer=MeshRasterizer(
                 cameras=cameras,
-                raster_settings=raster_settings
+                raster_settings=raster_settings,
             ),
             #shader=HardPhongShader(device=self.device, cameras=cameras, lights=lights)
-            shader=HardFlatShader(device=self.device, cameras=cameras, lights=lights)
+            shader=HardFlatShader(
+                device=self.device,
+                cameras=cameras,
+                lights=lights,
+            ),
         )
 
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
-        self.renderMode = ""  # 'human'
+        self.renderMode = 'human'
 
-    def reset(self, radius=1.0, azimuth=90.0, elevation=0.0):
+    def reset(self, radius=1.0, azimuth=90.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
         self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset)
 
@@ -230,7 +236,8 @@ class OcclusionEnv():
         image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
         self.image = image1 * image2
 
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
+        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+        observation = observation.permute(0, 3, 1, 2)
 
         # Calculate the silhouette loss
         loss = torch.sum((self.image[..., 3]) ** 2)
