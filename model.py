@@ -15,6 +15,16 @@ class Conv(nn.Module):
     def forward(self, x):
         return self.bn(torch.relu(self.conv(x)))
 
+class TrConv(nn.Module):
+    def __init__(self, inch, ch, k_size, stride, dilation, bias):
+        super().__init__()
+
+        self.conv = nn.ConvTranspose2d(inch, ch, k_size, stride=stride, dilation=dilation, padding=(k_size+dilation-1)//2, bias=bias, output_padding=1)
+        self.bn = nn.BatchNorm2d(ch)
+
+    def forward(self, x):
+        return self.bn(torch.relu(self.conv(x)))
+
 class ConvBlock(nn.Module):
     def __init__(self, ch, k_size, numLayers, dilation, bias, residual=False):
         super().__init__()
@@ -27,8 +37,27 @@ class ConvBlock(nn.Module):
         self.residual = residual
 
     def forward(self, x):
-        x = self.net(x)
-        return self.down(x)
+        y = self.net(x)
+        if self.residual:
+            y += x
+        return self.down(y), y
+
+class TrConvBlock(nn.Module):
+    def __init__(self, ch, k_size, numLayers, dilation, bias, residual=False):
+        super().__init__()
+
+        self.net = nn.Sequential()
+        for i in range(numLayers):
+            self.net.add_module("Layer %d" % (i+1), Conv(ch*2, ch*2, k_size, 1, dilation, bias))
+        self.up = TrConv(ch*2, ch, k_size, 2, dilation, bias)
+
+        self.residual = residual
+
+    def forward(self, x):
+        y = self.net(x)
+        if self.residual:
+            y += x
+        return self.up(x)
 
 class PredictorNet(nn.Module):
     def __init__(self, ch, numOut = 2, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False):
@@ -50,6 +79,60 @@ class PredictorNet(nn.Module):
 
         return output
 
+class Encoder(nn.Module):
+    def __init__(self, ch, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False):
+        super().__init__()
+
+        self.features = nn.ModuleList()
+        self.initial = Conv(4, ch, k_size, 1, 1, bias)
+        for i in range(levels):
+            self.features.append(ConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual))
+
+
+    def forward(self, x):
+
+        x = self.initial(x)
+
+        features = []
+
+        for block in self.features:
+            x, y = block(x)
+            features.append(y)
+
+        return x,features
+
+class Decoder(nn.Module):
+    def __init__(self, ch, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False):
+        super().__init__()
+
+        self.features = nn.ModuleList()
+        for i in range(levels)[::-1]:
+            self.features.append(TrConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual))
+
+
+    def forward(self, x):
+
+        x, features = x
+
+        for block, y in zip(self.features, features[::-1]):
+            x = block(x) + y
+
+        return x
+
+class Segmenter(nn.Module):
+    def __init__(self, ch, numOut = 1, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=True):
+        super().__init__()
+
+        self.encoder = Encoder(ch, levels, layers, k_size, dilation, bias, residual)
+        self.decoder = Decoder(ch, levels, layers, k_size, dilation, bias, residual)
+        self.classifier = nn.Conv2d(ch, numOut, 1)
+
+    def forward(self, x):
+        features = self.decoder(self.encoder(x))
+
+        predictions = self.classifier(features)
+
+        return features
 
 
 '''class Robot(nn.Module):
