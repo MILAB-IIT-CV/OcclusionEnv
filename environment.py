@@ -37,6 +37,54 @@ from pytorch3d.datasets import (
 )
 from torch.utils.data import DataLoader
 
+# Renderer with depth
+class MeshRendererWithDepth(nn.Module):
+    def __init__(self, rasterizer, shader):
+        super().__init__()
+        self.rasterizer = rasterizer
+        self.shader = shader
+
+    def forward(self, meshes_world, **kwargs) -> torch.Tensor:
+        fragments = self.rasterizer(meshes_world, **kwargs)
+        images = self.shader(fragments, meshes_world, **kwargs)
+        return images, fragments.zbuf
+
+def load_default_meshes():
+    # Load the obj and ignore the textures and materials.
+    distance = 2
+    verts, faces_idx, _ = load_obj("./data/teapot.obj")
+    faces = faces_idx.verts_idx
+
+    # Initialize each vertex to be white in color.
+    verts_rgb = torch.ones_like(verts)[None]  # (1, V, 3)
+    textures = TexturesVertex(verts_features=verts_rgb.to(device))
+
+    verts2 = verts + torch.tensor([distance, 0, 0])
+
+    verts3 = torch.vstack([verts, verts2])
+    faces3 = torch.vstack([faces, faces + verts.shape[0]])
+    # Initialize each vertex to be white in color.
+    verts_rgb3 = torch.ones_like(verts3)[None]  # (1, V, 3)
+    textures3 = TexturesVertex(verts_features=verts_rgb3.to(device))
+
+    # Create a Meshes object for the teapot. Here we have only one mesh in the batch.
+    teapot_mesh = Meshes(
+        verts=[verts.to(device)],
+        faces=[faces.to(device)],
+        textures=textures
+    )
+    teapot2_mesh = Meshes(
+        verts=[verts2.to(device)],
+        faces=[faces.to(device)],
+        textures=textures
+    )
+    full_mesh = Meshes(
+        verts=[verts3.to(device)],
+        faces=[faces3.to(device)],
+        textures=textures3
+    )
+
+    return [full_mesh, teapot_mesh, teapot2_mesh]
 
 def load_shapenet_meshes(dataset):
     # Set "randomize" to False to only select 1 category (category setup at line:57)
@@ -184,7 +232,7 @@ class OcclusionEnv():
         )
         # We can add a point light in front of the object.
         lights = PointLights(device=self.device, location=((2.0, 2.0, -2.0),))
-        self.phong_renderer = MeshRenderer(
+        self.phong_renderer = MeshRendererWithDepth(
             rasterizer=MeshRasterizer(
                 cameras=cameras,
                 raster_settings=raster_settings,
@@ -203,7 +251,7 @@ class OcclusionEnv():
 
     def reset(self, radius=4.0, azimuth=1.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
-        self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset)
+        self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
 
         self.fullReward = 0
         self.camera_position = torch.zeros(3).to(self.device)
@@ -214,22 +262,28 @@ class OcclusionEnv():
 
         R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, degrees=False, device=self.device)
 
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T).permute(0, 3, 1, 2)
+        observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+        observation.permute(0, 3, 1, 2)
+        depth.permute(0, 3, 1, 2)
 
-        return observation
+        return observation, depth
 
     def render(self):
 
         R = look_at_rotation(self.camera_position[None, :], device=self.device)  # (1, 3, 3)
         T = -torch.bmm(R.transpose(1, 2), self.camera_position[None, :, None])[:, :, 0]  # (1, 3)
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+        observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
 
         if self.renderMode == 'human':
             obs_img = (observation.detach().squeeze().cpu().numpy()[..., :3])# * 255).astype('uint8')
+            obs_depth = (depth.detach().squeeze().cpu().numpy())# * 255).astype('uint8')
+            obs_depth[obs_depth == -1] = 0
+            obs_depth *= 51
             cv2.imshow("Environment", obs_img)
+            cv2.imshow("Environment Depth", obs_depth.astype('uint8'))
             cv2.waitKey(25)
         else:
-            return observation
+            return observation, depth
 
     def step(self, action):
 
@@ -249,8 +303,10 @@ class OcclusionEnv():
         image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
         self.image = image1 * image2
 
-        observation = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+        observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
         observation = observation.permute(0, 3, 1, 2)
+        depth = depth.permute(0, 3, 1, 2)
+        observation[:,3,:,:] = depth
 
         # Calculate the silhouette loss
         loss = torch.sum((self.image[..., 3]) ** 2)
@@ -258,7 +314,7 @@ class OcclusionEnv():
 
         self.fullReward = loss.detach()
 
-        finished = (self.fullReward == 0)
+        finished = (self.fullReward < 0.1)
 
         info = {'full_state': self.image, 'position': self.camera_position, 'full_reward': self.fullReward}
 
