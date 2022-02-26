@@ -63,17 +63,14 @@ class PredictorNet(nn.Module):
     def __init__(self, ch, numOut = 2, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False):
         super().__init__()
 
-        self.features = nn.Sequential()
-        self.features.add_module("Initial", Conv(4, ch, k_size, 1, 1, bias))
-        for i in range(levels):
-            self.features.add_module("Block %d" % (i+1), ConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual))
+        self.features = Encoder(ch, levels, layers, k_size, dilation, bias, residual)
 
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.output = nn.Linear(ch*(2**levels), numOut)
 
     def forward(self, x):
 
-        features = self.features(x)
+        features, _ = self.features(x)
         reducedFeatures = self.pool(features).squeeze()
         output = self.output(reducedFeatures)
 
