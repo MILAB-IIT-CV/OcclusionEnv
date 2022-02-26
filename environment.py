@@ -263,10 +263,11 @@ class OcclusionEnv():
         R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, degrees=False, device=self.device)
 
         observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
-        observation.permute(0, 3, 1, 2)
-        depth.permute(0, 3, 1, 2)
+        observation = observation.permute(0, 3, 1, 2)
+        depth = depth.permute(0, 3, 1, 2)
+        observation[:,3,:,:] = depth
 
-        return observation, depth
+        return observation
 
     def render(self):
 
