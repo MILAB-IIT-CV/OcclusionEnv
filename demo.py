@@ -21,6 +21,8 @@ from pytorch3d.datasets import ShapeNetCore
 from environment import OcclusionEnv
 import matplotlib.pyplot as plt
 
+useShapeNet = True
+
 if __name__ == '__main__':
 
     # Set the cuda device
@@ -30,18 +32,20 @@ if __name__ == '__main__':
     else:
         device = torch.device("cpu")
 
-    # Load shapenet dataset
-    try:
-        # From Matyi's external drive
-        shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
-        shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
-    except:
+    shapenet_dataset = None
+    if useShapeNet:
+        # Load shapenet dataset
         try:
-            shapenet_dataset = ShapeNetCore("./data/shapenet/shapenetcore", version=2)
+            # From Matyi's external drive
+            shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
+            shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
         except:
-            shapenet_dataset = ShapeNetCore("/data/shapenet/shapenetcore", version=2)
+            try:
+                shapenet_dataset = ShapeNetCore("./data/shapenet/shapenetcore", version=2)
+            except:
+                shapenet_dataset = ShapeNetCore("/data/shapenet/shapenetcore", version=2)
 
-    print("Shapenetcore dataset loaded")
+        print("Shapenetcore dataset loaded")
 
     azimuth_randn = np.pi / 32  # 5,625 deg
     azimuth_randn = np.pi / 2  # 90 deg
@@ -50,6 +54,7 @@ if __name__ == '__main__':
 
     # Shapenet environment loader from here
     env = OcclusionEnv(shapenet_dataset)
+    env.renderMode = 'human'
     print("class instantiated")
     obs = env.reset(azimuth=azimuth_randn)
     print(f"env.azimuth is {env.azimuth}")
@@ -62,6 +67,8 @@ if __name__ == '__main__':
     writer = imageio.get_writer(filename_output, mode='I', duration=0.3)
     filename_output = "./optimization_demo_occl.gif"
     writer2 = imageio.get_writer(filename_output, mode='I', duration=0.3)
+    filename_output = "./optimization_demo_depth.gif"
+    writer3 = imageio.get_writer(filename_output, mode='I', duration=0.3)
 
     lr = 1e-6
 
@@ -70,7 +77,7 @@ if __name__ == '__main__':
     print("optimization start")
     i = 0
     while True:
-        print(i)
+        # print(i)
         i += 1
         if action.grad is not None:
             action.grad.zero_()
@@ -85,13 +92,21 @@ if __name__ == '__main__':
         rewards.append(reward.cpu().item())
         fullRewards.append(info['full_reward'].cpu().item())
 
-        image = obs[0].detach().permute(1, 2, 0).cpu().numpy()
-        image = img_as_ubyte(image)
+        image_arr = obs[0].detach().permute(1, 2, 0).cpu().numpy()
+        image = img_as_ubyte(image_arr[...,:3])
         writer.append_data(image)
 
         image = info['full_state'][0, ..., 3].detach().squeeze().cpu().numpy()
         image = img_as_ubyte(image)
         writer2.append_data(image)
+
+        depth = image_arr[...,3]
+        depth[depth == -1] = 0
+        depth *= 51
+        writer3.append_data(depth.astype('uint8'))
+
+
+        print(fullRewards[-1])
 
         if finished:
             print(f"finished after {i} iteration(s).")
