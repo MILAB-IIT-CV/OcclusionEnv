@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
     # Check if shapenet is installed
     shapenetdir = "./data/shapenetcore"
-    if len(os.listdir(shapenetdir)) == 0:
+    if not os.path.exists(shapenetdir) or len(os.listdir(shapenetdir)) == 0:
         envs = [lambda: OcclusionEnv() for _ in range(numEnvs)]
     else:
         shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
@@ -30,8 +30,8 @@ if __name__ == '__main__':
     numInterations = 10
 
     criterion = nn.MSELoss()
-    optimizer = optim.AdamW(net.parameters())
-    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, numEpisodes, 1e-4)
+    optimizer = optim.AdamW(net.parameters(), lr=1e-4)
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, numEpisodes, 1e-5)
 
     losses = []
 
