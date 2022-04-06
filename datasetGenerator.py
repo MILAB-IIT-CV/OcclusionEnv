@@ -25,7 +25,7 @@ from pytorch3d.datasets import ShapeNetCore
 from environment import OcclusionEnv
 import matplotlib.pyplot as plt
 
-useShapeNet = False
+useShapeNet = True
 
 if __name__ == '__main__':
 
@@ -53,11 +53,12 @@ if __name__ == '__main__':
 
     azimuth_randn = np.pi / 32  # 5,625 deg
     azimuth_randn = np.pi / 2  # 90 deg
+    azimuth_randn = 0  # 90 deg
 
     # azimuth_randn np.random.default_rng().uniform(low=-np.pi/32, high=np.pi/32)
 
     # Shapenet environment loader from here
-    lr = 1e-1
+    lr = 2.5e-2
     env = OcclusionEnv(shapenet_dataset)
     env.renderMode = 'human'
     print("class instantiated")
@@ -65,8 +66,11 @@ if __name__ == '__main__':
 
     os.makedirs("./Dataset", exist_ok=True)
 
+    numObj = 10000
+    numFrame = 20
+
     print("optimization start")
-    for i in range(2):
+    for i in tqdm.tqdm(range(numObj)):
         # print(i)
 
         os.makedirs("./Dataset/run_%d/Depth" % i, exist_ok=True)
@@ -77,22 +81,22 @@ if __name__ == '__main__':
 
         action = nn.Parameter(lr*torch.randn(2))
         obs = env.reset(azimuth=azimuth_randn)
-        print(f"env.azimuth is {env.azimuth}")
-        print("env reset complete")
+        #print(f"env.azimuth is {env.azimuth}")
+        #print("env reset complete")
+        j = 0
 
-        for j in tqdm.tqdm(range(10)):
+        while True:
             if action.grad is not None:
                 action.grad.zero_()
             obs, reward, finished, info = env.step(action)
             reward.backward()
             if torch.isnan(action.grad).any():
-                print("NaN gradients detected, attempting correction")
                 continue
 
             #env.render()
 
-            grad =  action.grad
-            pos = np.array([j, env.elevation, env.azimuth, grad[0].item(), grad[1].item()])
+            grad =  action.grad.cpu()
+            pos = np.array([j, env.elevation.cpu().item(), env.azimuth.cpu().item(), grad[0].item(), grad[1].item()])
             posParams = np.append(posParams, pos)
 
             image_arr = obs[0].detach().permute(1, 2, 0).cpu().numpy()
@@ -110,8 +114,11 @@ if __name__ == '__main__':
 
             action = nn.Parameter(lr * torch.randn(2))
 
+            j += 1
+            if j > 19:
+                break
+
 
         fName = "./Dataset/run_%d/params.pickle" % i
         file = open(fName, 'wb')
         pickle.dump(posParams, file)
-        print("Run %d complete" % i)
