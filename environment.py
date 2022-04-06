@@ -10,7 +10,7 @@ import os
 from pytorch3d.renderer import (
     FoVPerspectiveCameras, OpenGLPerspectiveCameras, look_at_view_transform, look_at_rotation,
     RasterizationSettings, MeshRenderer, MeshRasterizer, BlendParams,
-    SoftSilhouetteShader, HardPhongShader, PointLights, TexturesVertex,
+    SoftSilhouetteShader, HardPhongShader, PointLights, TexturesVertex, SoftPhongShader,
     HardFlatShader, mesh
 )
 import pytorch3d.structures as structures
@@ -88,10 +88,10 @@ def load_default_meshes():
 
 def load_shapenet_meshes(dataset):
     # Set "randomize" to False to only select 1 category (category setup at line:57)
-    randomize = False
+    randomize = True
 
     # Set "mute" to True, if no printing is necessary
-    mute = False
+    mute = True
 
     # Distance is the displacement of the farther object
     distance = 2
@@ -164,12 +164,12 @@ def load_shapenet_meshes(dataset):
         textures=obj_2_textures
     )
 
-    verts3 = torch.vstack([obj_1_verts, obj_2_verts])
-    faces3 = torch.vstack([obj_1_faces, obj_2_faces + obj_1_verts.shape[0]])
+    #verts3 = torch.vstack([obj_1_verts, obj_2_verts])
+    #faces3 = torch.vstack([obj_1_faces, obj_2_faces + obj_1_verts.shape[0]])
 
     # Initialize each vertex to be white in color.
     #textures3 = TexturesVertex(verts_features=torch.ones_like(verts3, device=device)[None])
-    full_mesh = structures.join_meshes_as_scene([obj_1_mesh, obj_2_mesh])
+    full_mesh = structures.join_meshes_as_scene([obj_1_mesh.clone(), obj_2_mesh.clone()])
 
     """full_mesh = Meshes(
         verts=[verts3.to(device)],
@@ -238,11 +238,8 @@ class OcclusionEnv():
                 raster_settings=raster_settings,
             ),
             #shader=HardPhongShader(device=self.device, cameras=cameras, lights=lights)
-            shader=HardFlatShader(
-                device=self.device,
-                cameras=cameras,
-                lights=lights,
-            ),
+            #shader=SoftPhongShader(device=self.device, cameras=cameras, lights=lights)
+            shader=HardFlatShader(device=self.device, cameras=cameras, lights=lights),
         )
 
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
