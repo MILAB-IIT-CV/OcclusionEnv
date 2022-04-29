@@ -1,6 +1,6 @@
 from dataset import OcclusionDataset
 
 if __name__=='__main__':
-    trainSet = OcclusionDataset("./DataSet/", "train")
+    trainSet = OcclusionDataset("./Dataset/", "train")
 
-    trainSet[0]
+    print(trainSet[0])

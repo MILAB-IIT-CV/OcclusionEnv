@@ -66,10 +66,10 @@ class OcclusionDataset(Dataset):
         if self.split == "train":
             img = self.jitter(img)
 
-            if torch.rand() > 0.5:
-                img = img.transpose(method=Image.Transpose.FLIP_LEFT_RIGHT)
-                depth = depth.transpose(method=Image.Transpose.FLIP_LEFT_RIGHT)
-                label = label.transpose(method=Image.Transpose.FLIP_LEFT_RIGHT)
+            if torch.rand(1) > 0.5:
+                img = img.transpose(method=Image.FLIP_LEFT_RIGHT)
+                depth = depth.transpose(method=Image.FLIP_LEFT_RIGHT)
+                label = label.transpose(method=Image.FLIP_LEFT_RIGHT)
 
         img = torch.tensor(np.asarray(img))/255.0
         depth = torch.tensor(np.asarray(depth)).unsqueeze(2)/255.0
