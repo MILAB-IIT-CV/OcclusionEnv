@@ -25,6 +25,10 @@ class OcclusionDataset(Dataset):
         self.gradLabels = []
 
         self.jitter = transforms.ColorJitter(0.3, 0.3, 0.2, 0.1)
+        self.norm = transforms.Normalize(
+            [0.5, 0.5, 0.5, 0.5],
+            [0.25, 0.25, 0.25, 0.25]
+        )
 
         baseDir = osp.join(root, split)
 
@@ -42,7 +46,6 @@ class OcclusionDataset(Dataset):
 
         self.posLabels = np.concatenate(self.posLabels, 0)
         self.gradLabels = np.concatenate(self.gradLabels, 0)
-        print("done")
 
     def __len__(self):
         return self.posLabels.shape[0]
@@ -75,6 +78,7 @@ class OcclusionDataset(Dataset):
         depth = torch.tensor(np.asarray(depth)).unsqueeze(2)/255.0
 
         img = torch.cat([img, depth], 2).permute(2,0,1)
-        label = torch.tensor(np.asarray(label)).long().unsqueeze(0)
+        img = self.norm(img)
+        label = torch.tensor(np.asarray(label)).float().unsqueeze(0)/255.0
 
         return img, label, grad, pos
