@@ -127,9 +127,9 @@ class Segmenter(nn.Module):
     def forward(self, x):
         features = self.decoder(self.encoder(x))
 
-        predictions = self.classifier(features)
+        predictions = torch.sigmoid(self.classifier(features))
 
-        return features
+        return features, predictions
 
 
 '''class Robot(nn.Module):
