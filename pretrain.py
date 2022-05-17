@@ -8,8 +8,25 @@ from torch.optim import lr_scheduler
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import sys
+import argparse
+from loss import BinaryDiceLoss
 
-if __name__=='__main__':
+if __name__ == '__main__':
+
+    parser = argparse.ArgumentParser(description='Pretrain the NN')
+    parser.add_argument('--desc', type=str, help='Description for the run (will be appended to saved model and plot')
+    parser.add_argument('--dice', action='store_true', help='Description for the run (will be appended to saved model and plot')
+
+    args = parser.parse_args()
+
+    desc = args.desc
+    usedice = args.dice
+
+    if desc is None:
+        desc = ''
+
+    if usedice:
+        desc = desc + "_dice"
 
     torch.manual_seed(42)
     torch.cuda.manual_seed(42)
@@ -25,10 +42,12 @@ if __name__=='__main__':
     model = Segmenter(8).cuda()
 
     numEpochs = 50
+    
+    lr = 1e-3 if usedice else 1e-4
 
-    criterion = nn.BCELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=1e-4)
-    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, numEpochs, 1e-5)
+    criterion = BinaryDiceLoss() if usedice else nn.BCELoss()
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
+    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, numEpochs, lr*0.1)
 
     losses = []
     accs = []
@@ -122,7 +141,7 @@ if __name__=='__main__':
 
         if running_iou > bestIoU:
             bestIoU = running_iou
-            torch.save(model, "bestSegModel.pt")
+            torch.save(model, "bestSegModel_" + desc + ".pt")
             print("Best model found")
 
         scheduler.step()
