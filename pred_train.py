@@ -34,7 +34,7 @@ if __name__ == '__main__':
 
     model = PredictorNet(8).cuda()
 
-    numEpochs = 3
+    numEpochs = 50
 
     criterion = nn.MSELoss()
     optimizer = optim.AdamW(model.parameters(),
