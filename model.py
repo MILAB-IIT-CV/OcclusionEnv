@@ -39,7 +39,7 @@ class ConvBlock(nn.Module):
         self.net = nn.Sequential()
         for i in range(numLayers):
             self.net.add_module("Layer %d" % (i+1), Conv(ch, ch, k_size, 1, dilation, bias, separable))
-        self.down = Conv(ch, ch*2, k_size, 2, 1, bias)
+        self.down = Conv(ch, ch*2, k_size, 2, 1, bias, False)
 
         self.residual = residual
 
@@ -89,7 +89,7 @@ class Encoder(nn.Module):
         super().__init__()
 
         self.features = nn.ModuleList()
-        self.initial = Conv(4, ch, k_size, 1, 1, bias)
+        self.initial = Conv(4, ch, k_size, 1, 1, bias, separable)
         for i in range(levels):
             self.features.append(ConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual, separable))
 
