@@ -1,4 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.9" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.7 (base)" project-jdk-type="Python SDK" />
+  <component name="UnattendedHostPersistenceState">
+    <option name="openedFilesInfos">
+      <list>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="1164" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/pretrain.py" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="2676" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/dataset.py" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="1816" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/pred_train.py" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="9327" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/../anaconda3/lib/python3.7/site-packages/torch/autograd/__init__.py" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="6735" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/../anaconda3/lib/python3.7/multiprocessing/queues.py" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="2086" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/model.py" />
+        </OpenedFileInfo>
+      </list>
+    </option>
+  </component>
 </project>

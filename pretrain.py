@@ -10,17 +10,31 @@ from tqdm import tqdm
 import sys
 import argparse
 from loss import BinaryDiceLoss
+import os
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Pretrain the NN')
     parser.add_argument('--desc', type=str, help='Description for the run (will be appended to saved model and plot')
     parser.add_argument('--dice', action='store_true', help='Description for the run (will be appended to saved model and plot')
+    parser.add_argument('--decay', type=float, default=1e-5, help='Weight decay')
+    parser.add_argument('--dilation', type=int, default=1, help='Dilation of encoder')
+    parser.add_argument('--no-residual', action='store_true', help='Dont use residual blocks')
+    parser.add_argument('--separable', action='store_true', help='Use separable convolution')
 
     args = parser.parse_args()
 
     desc = args.desc
     usedice = args.dice
+    decay = args.decay
+    dilation = args.dilation
+    if dilation > 2:
+        dilation = 2
+    if dilation < 1:
+        dilation = 1
+    no_residual = args.no_residual
+    separable = args.separable
+    cores = os.cpu_count()
 
     if desc is None:
         desc = ''
@@ -36,17 +50,17 @@ if __name__ == '__main__':
     trainSet = OcclusionDataset("./Dataset/", "train")
     valSet = OcclusionDataset("./Dataset/", "val")
 
-    trainLoader = DataLoader(trainSet, batch_size=128, shuffle=True, num_workers=8)
-    valLoader = DataLoader(valSet, batch_size=128, shuffle=True, num_workers=8)
+    trainLoader = DataLoader(trainSet, batch_size=128, shuffle=True, num_workers=cores)
+    valLoader = DataLoader(valSet, batch_size=128, shuffle=True, num_workers=cores)
 
-    model = Segmenter(8).cuda()
+    model = Segmenter(8, dilation=dilation, residual=not no_residual, separable=separable).cuda()
 
     numEpochs = 50
     
     lr = 1e-3 if usedice else 1e-4
 
     criterion = BinaryDiceLoss() if usedice else nn.BCELoss()
-    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=decay)
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, numEpochs, lr*0.1)
 
     losses = []

@@ -6,10 +6,17 @@ import numpy as np
 #from pytorch3d.renderer import look_at_rotation
 
 class Conv(nn.Module):
-    def __init__(self, inch, ch, k_size, stride, dilation, bias):
+    def __init__(self, inch, ch, k_size, stride, dilation, bias, separable):
         super().__init__()
 
-        self.conv = nn.Conv2d(inch, ch, k_size, stride=stride, dilation=dilation, padding=(k_size+dilation-1)//2, bias=bias)
+        self.conv = nn.Sequential(
+            nn.Conv2d(inch, inch, (k_size, 1), stride=(1, 1), dilation=(dilation, 1), padding=((k_size + dilation - 1) // 2, 0),
+                      bias=False, groups=inch),
+            nn.Conv2d(inch, inch, (1, k_size), stride=(1, 1), dilation=(1, dilation), padding=(0, (k_size + dilation - 1) // 2),
+                      bias=False, groups=inch),
+            nn.Conv2d(inch, ch, 1, stride=1, bias=bias),
+        ) if separable else \
+            nn.Conv2d(inch, ch, k_size, stride=stride, dilation=dilation, padding=(k_size+dilation-1)//2, bias=bias)
         self.bn = nn.BatchNorm2d(ch)
 
     def forward(self, x):
@@ -26,13 +33,13 @@ class TrConv(nn.Module):
         return self.bn(torch.relu(self.conv(x)))
 
 class ConvBlock(nn.Module):
-    def __init__(self, ch, k_size, numLayers, dilation, bias, residual=False):
+    def __init__(self, ch, k_size, numLayers, dilation, bias, residual=False, separable=False):
         super().__init__()
 
         self.net = nn.Sequential()
         for i in range(numLayers):
-            self.net.add_module("Layer %d" % (i+1), Conv(ch, ch, k_size, 1, dilation, bias))
-        self.down = Conv(ch, ch*2, k_size, 2, dilation, bias)
+            self.net.add_module("Layer %d" % (i+1), Conv(ch, ch, k_size, 1, dilation, bias, separable))
+        self.down = Conv(ch, ch*2, k_size, 2, 1, bias)
 
         self.residual = residual
 
@@ -43,13 +50,13 @@ class ConvBlock(nn.Module):
         return self.down(y), y
 
 class TrConvBlock(nn.Module):
-    def __init__(self, ch, k_size, numLayers, dilation, bias, residual=False):
+    def __init__(self, ch, k_size, numLayers, dilation, bias, residual=False, separable=False):
         super().__init__()
 
         self.net = nn.Sequential()
         for i in range(numLayers):
-            self.net.add_module("Layer %d" % (i+1), Conv(ch*2, ch*2, k_size, 1, dilation, bias))
-        self.up = TrConv(ch*2, ch, k_size, 2, dilation, bias)
+            self.net.add_module("Layer %d" % (i+1), Conv(ch*2, ch*2, k_size, 1, dilation, bias, separable))
+        self.up = TrConv(ch*2, ch, k_size, 2, 1, bias)
 
         self.residual = residual
 
@@ -67,23 +74,24 @@ class PredictorNet(nn.Module):
 
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.output = nn.Linear(ch*(2**levels), numOut)
+        # self.double()
 
     def forward(self, x):
 
         features, _ = self.features(x)
         reducedFeatures = self.pool(features).squeeze()
-        output = self.output(reducedFeatures)
+        output = torch.tanh(self.output(reducedFeatures))
 
         return output
 
 class Encoder(nn.Module):
-    def __init__(self, ch, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False):
+    def __init__(self, ch, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False, separable=False):
         super().__init__()
 
         self.features = nn.ModuleList()
         self.initial = Conv(4, ch, k_size, 1, 1, bias)
         for i in range(levels):
-            self.features.append(ConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual))
+            self.features.append(ConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual, separable))
 
 
     def forward(self, x):
@@ -99,12 +107,12 @@ class Encoder(nn.Module):
         return x,features
 
 class Decoder(nn.Module):
-    def __init__(self, ch, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False):
+    def __init__(self, ch, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False, separable=False):
         super().__init__()
 
         self.features = nn.ModuleList()
         for i in range(levels)[::-1]:
-            self.features.append(TrConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual))
+            self.features.append(TrConvBlock(ch*(2**i), k_size, layers, dilation, bias, residual, separable))
 
 
     def forward(self, x):
@@ -117,11 +125,11 @@ class Decoder(nn.Module):
         return x
 
 class Segmenter(nn.Module):
-    def __init__(self, ch, numOut = 1, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=True):
+    def __init__(self, ch, numOut = 1, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=True, separable=False):
         super().__init__()
 
-        self.encoder = Encoder(ch, levels, layers, k_size, dilation, bias, residual)
-        self.decoder = Decoder(ch, levels, layers, k_size, dilation, bias, residual)
+        self.encoder = Encoder(ch, levels, layers, k_size, dilation, bias, residual, separable)
+        self.decoder = Decoder(ch, levels, layers, k_size, dilation, bias, residual, separable)
         self.classifier = nn.Conv2d(ch, numOut, 1)
 
     def forward(self, x):

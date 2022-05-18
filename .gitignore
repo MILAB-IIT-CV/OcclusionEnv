@@ -4,4 +4,5 @@
 ./teapot_optimization_demo.gif
 ./teapot_optimization_demo_occl.gif
 ./results
+/results/
 *.pt
