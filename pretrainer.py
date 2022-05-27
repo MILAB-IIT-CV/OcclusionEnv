@@ -205,6 +205,17 @@ class PreTrainer(object):
 
     def run(self):
 
+
+        print("Strating Training with options")
+        print("Dice: ", self.useDice)
+        print("Residual: ", self.residual)
+        print("Separable: ", self.separable)
+        print("Dilation: ", self.dilation)
+        print("LR: ", self.lr)
+        print("Decay: ", self.decay)
+        print("Quick Test: ", self.quick_test)
+        print("")
+
         for epoch in range(self.numEpochs):
 
             running_loss, running_segm_loss, running_grad_loss, running_acc, running_iou = self.train()
@@ -282,3 +293,6 @@ class PreTrainer(object):
 
         with open("./figs/bestRes" + self.descr + ".pickle", "wb+") as file:
             pickle.dump(data, file)
+
+        print("Finished Training")
+        print("")
