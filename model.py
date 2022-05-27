@@ -139,6 +139,34 @@ class Segmenter(nn.Module):
 
         return features, predictions
 
+class FullNetwork(nn.Module):
+    def __init__(self, ch, numGradOut = 2, numOut = 2, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=True, separable=False):
+        super().__init__()
+
+        self.encoder = Encoder(ch, levels, layers, k_size, dilation, bias, residual, separable)
+        self.segmenter = nn.Sequential(
+            Decoder(ch, levels, layers, k_size, dilation, bias, residual, separable),
+            nn.Conv2d(ch, 1, 1)
+        )
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.gradPredictor = nn.Linear(ch*(2**levels), numGradOut)
+        self.action_head = nn.Linear(ch*(2**levels), numOut)
+        self.value_head = nn.Linear(ch*(2**levels), 1)
+
+    def forward(self, x):
+        features = self.encoder(x)
+
+        segm_predictions = torch.sigmoid(self.segmenter(features))
+
+        last_feature = features[0]
+        pooled_features = self.pool(last_feature).squeeze()
+
+        grad_predictions = torch.tanh(self.gradPredictor(pooled_features))
+        action_scores = torch.tanh(self.action_head(pooled_features))
+        value = self.value_head(pooled_features)
+
+        return action_scores, value, segm_predictions, grad_predictions
+
 
 '''class Robot(nn.Module):
     def __init__(self, meshes, renderer):
