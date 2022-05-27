@@ -33,11 +33,11 @@ if __name__ == '__main__':
 
     if do_all:
         param_set = [
-            [desc, False, True, False, 1, lr, decay, quick_test],
-            [desc, True, True, False, 1, lr, decay, quick_test],
+            [desc, False, False, False, 1, lr, decay, quick_test],
             [desc, True, False, False, 1, lr, decay, quick_test],
-            [desc, True, False, True, 1, lr, decay, quick_test],
-            [desc, True, False, True, 2, lr, decay, quick_test],
+            [desc, True, True, False, 1, lr, decay, quick_test],
+            [desc, True, True, True, 1, lr, decay, quick_test],
+            [desc, True, True, True, 2, lr, decay, quick_test],
         ]
         for param in param_set:
             trainer = PreTrainer(*param)
