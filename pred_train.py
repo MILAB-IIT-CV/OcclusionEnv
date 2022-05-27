@@ -32,9 +32,9 @@ if __name__ == '__main__':
                            num_workers=4,
                            )
 
-    model = PredictorNet(8).cuda()
+    model = PredictorNet(8, separable=True).cuda()
 
-    numEpochs = 50
+    numEpochs = 30
 
     criterion = nn.MSELoss()
     optimizer = optim.AdamW(model.parameters(),
@@ -96,6 +96,7 @@ if __name__ == '__main__':
                                                                        )
               )
         sys.stdout.flush()
+        print(f"Train epoch {i+1}/{numEpochs} finished. Loss: {running_loss}")
 
         losses.append(running_loss)
 
@@ -128,11 +129,8 @@ if __name__ == '__main__':
 
         running_loss /= len(valLoader)
 
-        print("Val epoch %d finished. Loss: %.6f, Accuracy: %.2f" % (i + 1,
-                                                                     running_loss,
-                                                                     running_acc
-                                                                     )
-              )
+        print(f"Val epoch {i+1}/{numEpochs} finished. Loss: {running_loss}")
+
         sys.stdout.flush()
 
         vallosses.append(running_loss)
@@ -144,6 +142,9 @@ if __name__ == '__main__':
 
         scheduler.step()
 
-    plt.plot(losses)
-    plt.plot(vallosses)
-    plt.show()
+    plt.plot(losses, label="train")
+    plt.plot(vallosses, label="validation")
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend(loc="upper right")
+    plt.savefig('pred_train_losses.png')

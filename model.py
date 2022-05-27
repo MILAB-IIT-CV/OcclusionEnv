@@ -67,10 +67,10 @@ class TrConvBlock(nn.Module):
         return self.up(x)
 
 class PredictorNet(nn.Module):
-    def __init__(self, ch, numOut = 2, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False):
+    def __init__(self, ch, numOut = 2, levels=5, layers=2, k_size=3, dilation=1, bias=True, residual=False, separable=False):
         super().__init__()
 
-        self.features = Encoder(ch, levels, layers, k_size, dilation, bias, residual)
+        self.features = Encoder(ch, levels, layers, k_size, dilation, bias, residual, separable)
 
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.output = nn.Linear(ch*(2**levels), numOut)
