@@ -81,4 +81,11 @@ class OcclusionDataset(Dataset):
         img = self.norm(img)
         label = torch.tensor(np.asarray(label)).float().unsqueeze(0)/255.0
 
+        # Calculate grad angle sin and cos
+        alpha = torch.nan_to_num(torch.arctan(grad[0] / grad[1]),
+                                 nan=0,
+                                 )
+        grad = torch.tensor([torch.sin(alpha), torch.cos(alpha)]).float()
+
+
         return img, label, grad, pos
