@@ -18,12 +18,13 @@ import random
 
 
 class PreTrainer(object):
-    def __init__(self, descr="", useDice=True, residual=True, separable=False, dilation=1, lr=1e-3, decay=1e-5, quick_test=False):
+    def __init__(self, descr="", useDice=True, usel1 = False, residual=True, separable=False, dilation=1, lr=1e-3, decay=1e-5, quick_test=False):
 
         self.descr = descr if descr is not None else ""
         self.useDice = useDice
         self.residual = residual
         self.separable = separable
+        self.usel1 = usel1
         if dilation > 2:
             dilation = 2
         if dilation < 1:
@@ -60,6 +61,8 @@ class PreTrainer(object):
     def updateDescription(self):
         if self.useDice:
             self.descr = self.descr + "_dice"
+        if self.usel1:
+            self.descr = self.descr + "_l1"
         if self.quick_test:
             self.descr = self.descr + "_quick_test"
         if self.dilation > 1:
@@ -84,7 +87,7 @@ class PreTrainer(object):
     def createLearners(self):
 
         self.criterion_segm = BinaryDiceLoss() if self.useDice else nn.BCELoss()
-        self.criterion_grad = nn.MSELoss()
+        self.criterion_grad = nn.SmoothL1Loss(beta=0.01) if self.usel1 else nn.MSELoss()
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.decay)
         self.scheduler = lr_scheduler.CosineAnnealingLR(self.optimizer, self.numEpochs, self.lr * 0.1)
 
@@ -208,6 +211,7 @@ class PreTrainer(object):
 
         print("Strating Training with options")
         print("Dice: ", self.useDice)
+        print("L1: ", self.usel1)
         print("Residual: ", self.residual)
         print("Separable: ", self.separable)
         print("Dilation: ", self.dilation)
