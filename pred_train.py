@@ -65,9 +65,9 @@ if __name__ == '__main__':
             img, grad = img.cuda(), grad.cuda()
 
             # Calculate grad angle sin and cos
-            alpha = torch.nan_to_num(torch.arctan(grad[:, 0]/grad[:, 1]),
-                                     nan=0,
-                                     )
+            with torch.no_grad():
+                alpha = torch.arctan(grad[0] / grad[1])
+                alpha[torch.isnan(alpha)] = 0
 
             grad_alpha_sin, grad_alpha_cos = torch.sin(alpha).cuda(), torch.cos(alpha).cuda()
 
@@ -108,9 +108,9 @@ if __name__ == '__main__':
             img, grad = img.cuda(), grad.cuda()
 
             # Calculate grad angle sin and cos
-            alpha = torch.nan_to_num(torch.arctan(grad[:, 0] / grad[:, 1]),
-                                     nan=0,
-                                     )
+            with torch.no_grad():
+                alpha = torch.arctan(grad[0] / grad[1])
+                alpha[torch.isnan(alpha)] = 0
 
             grad_alpha_sin, grad_alpha_cos = torch.sin(alpha).cuda(), torch.cos(alpha).cuda()
 
