@@ -88,7 +88,8 @@ def load_default_meshes():
 
 def load_shapenet_meshes(dataset):
     # Set "randomize" to False to only select 1 category (category setup at line:57)
-    randomize = True
+    randomize_type = False
+    randomize_model = False
 
     # Set "mute" to True, if no printing is necessary
     mute = True
@@ -99,16 +100,16 @@ def load_shapenet_meshes(dataset):
     # Choose an object category randomly, then choose model id for that category randomly
     object_indices = []
     for _ in range(2):
-        if randomize:
+        if randomize_type:
             category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
             category_id = list(dataset.synset_dict.keys())[category_randn]
         else:
-            category_name = "airplane"  # "bus" "chair" "table" "microwaves" "rifle" "chair" "airplane"
+            category_name = "table"  # "bus" "chair" "table" "microwaves" "rifle" "chair" "airplane"
             category_id = dataset.synset_inv[category_name]
 
         low_idx = dataset.synset_start_idxs[category_id]
 
-        if randomize:
+        if randomize_model:
             high_idx = low_idx + dataset.synset_num_models[category_id]
         else:
             high_idx = low_idx + 1
@@ -130,9 +131,6 @@ def load_shapenet_meshes(dataset):
         print(obj_1["synset_id"])
         print("Model 1 belongs to the category " + obj_1["label"] + ".")
         print("Model 1 has model id " + obj_1["model_id"] + ".")
-
-    # white vertices
-    #obj_1_textures = TexturesVertex(verts_features=torch.ones_like(obj_1_verts, device=device)[None])
 
     obj_1_mesh = Meshes(
         verts=[obj_1_verts.to(device)],
@@ -156,26 +154,13 @@ def load_shapenet_meshes(dataset):
         print("Model 2 belongs to the category " + obj_2["label"] + ".")
         print("Model 2 has model id " + obj_2["model_id"] + ".")
 
-    # white vertices
-    #obj_2_textures = TexturesVertex(verts_features=torch.ones_like(obj_2_verts,device=device)[None])
     obj_2_mesh = Meshes(
         verts=[obj_2_verts.to(device)],
         faces=[obj_2_faces.to(device)],
         textures=obj_2_textures
     )
 
-    #verts3 = torch.vstack([obj_1_verts, obj_2_verts])
-    #faces3 = torch.vstack([obj_1_faces, obj_2_faces + obj_1_verts.shape[0]])
-
-    # Initialize each vertex to be white in color.
-    #textures3 = TexturesVertex(verts_features=torch.ones_like(verts3, device=device)[None])
     full_mesh = structures.join_meshes_as_scene([obj_1_mesh.clone(), obj_2_mesh.clone()])
-
-    """full_mesh = Meshes(
-        verts=[verts3.to(device)],
-        faces=[faces3.to(device)],
-        textures=textures3
-    )"""
 
     return [full_mesh, obj_1_mesh, obj_2_mesh]
 
@@ -246,9 +231,10 @@ class OcclusionEnv():
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
         self.renderMode = "" #'human'
 
-    def reset(self, radius=4.0, azimuth=1.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
+    def reset(self, new_scene=True, radius=4.0, azimuth=1.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
-        self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
+        if new_scene:
+            self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
 
         self.fullReward = 0
         self.camera_position = torch.zeros(3).to(self.device)
@@ -262,7 +248,7 @@ class OcclusionEnv():
         observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
         observation = observation.permute(0, 3, 1, 2)
         depth = depth.permute(0, 3, 1, 2)
-        observation[:,3,:,:] = depth
+        observation[:, 3, :, :] = depth
 
         return observation
 
@@ -304,7 +290,7 @@ class OcclusionEnv():
         observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
         observation = observation.permute(0, 3, 1, 2)
         depth = depth.permute(0, 3, 1, 2)
-        observation[:,3,:,:] = depth
+        observation[:, 3, :, :] = depth
 
         # Calculate the silhouette loss
         loss = torch.sum((self.image[..., 3]) ** 2)
