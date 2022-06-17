@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     export_env_gif = False
-    export_pred_gif = True
+    export_pred_gif = False
 
     # Set the cuda device
     if torch.cuda.is_available():
@@ -51,12 +51,12 @@ if __name__ == '__main__':
     # number of steps and azimuth range
     azimuth_low = -310  # [-pi/32]
     azimuth_high = 311  # [pi/32]
-    azimuth_step_size = 10      # [pi/992]
+    azimuth_step_size = 10      # 10: [pi/992]
     num_iters = azimuth_high - azimuth_low
     num_iters /= azimuth_step_size
     num_iters = np.round_(num_iters)
 
-    # allowed of maximum steps per initial azimuth value
+    # maximum number of allowed steps per initial azimuth value
     max_step = 2000
 
     for iteration in tqdm(range(azimuth_low, azimuth_high, azimuth_step_size)):
@@ -90,7 +90,7 @@ if __name__ == '__main__':
         print(f"Current azimuth value: {current_azimuth}")
 
         # raw gradient loop
-        for i in range(1500):
+        for i in range(max_step):
             print(i, end="\r")
             if action.grad is not None:
                 action.grad.zero_()
@@ -106,7 +106,7 @@ if __name__ == '__main__':
             fullRewards.append(info['full_reward'].cpu().item())
 
             if export_env_gif:
-                image = obs[0].detach().permute(1,2,0).cpu().numpy()
+                image = obs[0].detach().permute(1, 2, 0).cpu().numpy()
                 image = img_as_ubyte(image[..., 2])
                 writer_raw.append_data(image)
 
@@ -152,7 +152,7 @@ if __name__ == '__main__':
         fullRewards = []
 
         # model loop
-        for i in range(1500):
+        for i in range(max_step+70):
             print(i, end="\r")
             if action.grad is not None:
                 action.grad.zero_()
@@ -180,6 +180,10 @@ if __name__ == '__main__':
                 print(f"Finished after {i} iteration(s) with predicted gradients.")
                 break
 
+            elif i == max_step+70:
+                print(f"Haven't finished in {i} steps. Continuing.")
+                iterations_model[current_azimuth] = i + 1
+
         plt.figure()
         plt.subplot(1, 2, 1)
         plt.plot(rewards)
@@ -192,12 +196,12 @@ if __name__ == '__main__':
         if export_pred_gif:
             writer_model.close()
 
-    file = open("./results/iterations_raw.txt", "w")
+    file = open("results/current_result/iterations_raw_3.txt", "w")
     dict_string = repr(iterations_raw)
     file.write(dict_string)
     file.close()
 
-    file = open("./results/iterations_model.txt", "w")
+    file = open("results/current_result/iterations_model_3.txt", "w")
     dict_string = repr(iterations_model)
     file.write(dict_string)
     file.close()
