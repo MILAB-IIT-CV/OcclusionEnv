@@ -1,3 +1,5 @@
+import random
+
 import gym
 from gym.spaces import Tuple, MultiDiscrete, Box, MultiBinary, Dict, Space, Discrete
 import torch
@@ -5,7 +7,6 @@ from torch import nn as nn
 import cv2
 import numpy as np
 import os
-import random
 
 # rendering components
 from pytorch3d.renderer import (
@@ -87,11 +88,10 @@ def load_default_meshes():
 
     return [full_mesh, teapot_mesh, teapot2_mesh]
 
-
-def load_shapenet_meshes(dataset, num_objects=3):
-    # Set "randomize" to False to only select 1 category
-    randomize_type = True
-    randomize_model = True
+def load_shapenet_meshes(dataset):
+    # Set "randomize" to False to only select 1 category (category setup at line:57)
+    randomize_type = False
+    randomize_model = False
 
     # Set "mute" to True, if no printing is necessary
     mute = True
@@ -101,7 +101,7 @@ def load_shapenet_meshes(dataset, num_objects=3):
 
     # Choose an object category randomly, then choose model id for that category randomly
     object_indices = []
-    for _ in range(num_objects):
+    for _ in range(2):
         if randomize_type:
             category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
             category_id = list(dataset.synset_dict.keys())[category_randn]
@@ -142,10 +142,7 @@ def load_shapenet_meshes(dataset, num_objects=3):
 
     # initialize obj#2
     obj_2 = dataset[object_indices[1]]
-
-    # set offset for obj_2
-    x2 = np.random.randn()
-    obj_2_verts, obj_2_faces = obj_2["verts"] + torch.tensor([x2, 0, distance/2]), obj_2["faces"]
+    obj_2_verts, obj_2_faces = obj_2["verts"] + torch.tensor([0, 0, distance]), obj_2["faces"]
 
     # Check if texture is available for the model, if not, make vertices white
     if obj_2["textures"] is not None:
@@ -164,38 +161,10 @@ def load_shapenet_meshes(dataset, num_objects=3):
         faces=[obj_2_faces.to(device)],
         textures=obj_2_textures
     )
-    if num_objects == 3:
 
-        # initialize obj#3
-        obj_3 = dataset[object_indices[2]]
-        obj_3_verts, obj_3_faces = obj_3["verts"] + torch.tensor([-x2, 0, distance]), obj_3["faces"]
+    full_mesh = structures.join_meshes_as_scene([obj_1_mesh.clone(), obj_2_mesh.clone()])
 
-        # Check if texture is available for the model, if not, make vertices white
-        if obj_3["textures"] is not None:
-            obj_3_textures = mesh.TexturesAtlas(atlas=[obj_3["textures"]]).to(device)
-        else:
-            obj_3_textures = TexturesVertex(verts_features=torch.ones_like(obj_3_verts, device=device)[None])
-
-        if not mute:
-            print(f"object 3 index is: {object_indices[2]}.")
-            print(obj_3["synset_id"])
-            print("Model 3 belongs to the category " + obj_3["label"] + ".")
-            print("Model 3 has model id " + obj_3["model_id"] + ".")
-
-        obj_3_mesh = Meshes(
-            verts=[obj_3_verts.to(device)],
-            faces=[obj_3_faces.to(device)],
-            textures=obj_3_textures
-        )
-
-        full_mesh = structures.join_meshes_as_scene([obj_1_mesh.clone(), obj_2_mesh.clone(), obj_3_mesh.clone()])
-
-        return [full_mesh, obj_1_mesh, obj_2_mesh, obj_3_mesh]
-
-    else:
-        full_mesh = structures.join_meshes_as_scene([obj_1_mesh.clone(), obj_2_mesh.clone()])
-
-        return [full_mesh, obj_1_mesh, obj_2_mesh]
+    return [full_mesh, obj_1_mesh, obj_2_mesh]
 
 
 class OcclusionEnv():
@@ -212,8 +181,6 @@ class OcclusionEnv():
 
         # Shapenet dataset to be passed as "data" when calling the constructor.
         self.shapenet_dataset = data
-
-        self.step_size = 0.05
 
         # Initialize a perspective camera.
         cameras = FoVPerspectiveCameras(device=self.device)
@@ -232,7 +199,6 @@ class OcclusionEnv():
             blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
             faces_per_pixel=100,
             cull_backfaces=True,
-            max_faces_per_bin=25000
         )
 
         # Create a silhouette mesh renderer by composing a rasterizer and a shader.
@@ -249,8 +215,7 @@ class OcclusionEnv():
             image_size=img_size,
             blur_radius=0.0,
             faces_per_pixel=1,
-            cull_backfaces=True,
-            max_faces_per_bin=25000
+            cull_backfaces=True
         )
         # We can add a point light in front of the object.
         lights = PointLights(device=self.device, location=((2.0, 2.0, -2.0),))
@@ -266,7 +231,7 @@ class OcclusionEnv():
 
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
-        self.renderMode = 'human'
+        self.renderMode = "" #'human'
 
     def seed(self, seed):
         random.seed(seed)
@@ -276,7 +241,7 @@ class OcclusionEnv():
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    def reset(self, new_scene=True, radius=4.0, azimuth=0.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
+    def reset(self, new_scene=True, radius=4.0, azimuth=1.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
         if new_scene:
             self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
@@ -318,12 +283,8 @@ class OcclusionEnv():
 
         self.detach()
 
-        action_norm = torch.norm(action)
-
-        normalized_action = action/action_norm if action_norm else action
-
-        self.elevation += normalized_action[0]*self.step_size
-        self.azimuth += normalized_action[1]*self.step_size
+        self.elevation += action[0]
+        self.azimuth += action[1]
 
         self.camera_position[0] = self.radius * torch.sin(self.azimuth) * torch.cos(self.elevation)
         self.camera_position[1] = self.radius * torch.sin(self.azimuth) * torch.sin(self.elevation)
@@ -334,8 +295,7 @@ class OcclusionEnv():
 
         image1 = self.silhouette_renderer(meshes_world=self.meshes[1].clone(), R=R, T=T)
         image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
-        image3 = self.silhouette_renderer(meshes_world=self.meshes[3].clone(), R=R, T=T)
-        self.image = (image1 * image2) + (image2 * image3) + (image1 * image3)
+        self.image = image1 * image2
 
         observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
         observation = observation.permute(0, 3, 1, 2)

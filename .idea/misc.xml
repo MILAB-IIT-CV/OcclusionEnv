@@ -1,32 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.7 (base)" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.9 (pytorch3d)" project-jdk-type="Python SDK" />
   <component name="UnattendedHostPersistenceState">
     <option name="openedFilesInfos">
       <list>
         <OpenedFileInfo>
-          <option name="caretOffset" value="1164" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/pretrain.py" />
+          <option name="caretOffset" value="585" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/datasetGenerator.py" />
         </OpenedFileInfo>
         <OpenedFileInfo>
-          <option name="caretOffset" value="2676" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/dataset.py" />
+          <option name="caretOffset" value="2821" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/trainer.py" />
         </OpenedFileInfo>
         <OpenedFileInfo>
-          <option name="caretOffset" value="1816" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/pred_train.py" />
+          <option name="caretOffset" value="8172" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/trainRL.py" />
         </OpenedFileInfo>
         <OpenedFileInfo>
-          <option name="caretOffset" value="9327" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/../anaconda3/lib/python3.7/site-packages/torch/autograd/__init__.py" />
+          <option name="caretOffset" value="10192" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/environment.py" />
         </OpenedFileInfo>
         <OpenedFileInfo>
-          <option name="caretOffset" value="6735" />
-          <option name="fileUrl" value="file://$PROJECT_DIR$/../anaconda3/lib/python3.7/multiprocessing/queues.py" />
-        </OpenedFileInfo>
-        <OpenedFileInfo>
-          <option name="caretOffset" value="2086" />
+          <option name="caretOffset" value="5949" />
           <option name="fileUrl" value="file://$PROJECT_DIR$/model.py" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="2535" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/PPO.py" />
+        </OpenedFileInfo>
+        <OpenedFileInfo>
+          <option name="caretOffset" value="5377" />
+          <option name="fileUrl" value="file://$PROJECT_DIR$/pretrainer.py" />
         </OpenedFileInfo>
       </list>
     </option>
