@@ -1,5 +1,3 @@
-import pickle
-
 from dataset import OcclusionDataset
 from torch.utils.data import DataLoader
 from model import Segmenter, FullNetwork
@@ -18,29 +16,26 @@ import random
 
 
 class PreTrainer(object):
-    def __init__(self, descr="", useDice=True, usel1 = False, residual=True, separable=False, dilation=1, lr=1e-3, decay=1e-5, quick_test=False):
+    def __init__(self, descr="", lr=1e-3, decay=1e-5, entropy=1e-4):
 
         self.descr = descr if descr is not None else ""
-        self.useDice = useDice
-        self.residual = residual
-        self.separable = separable
-        self.usel1 = usel1
-        if dilation > 2:
-            dilation = 2
-        if dilation < 1:
-            dilation = 1
-        self.dilation = dilation
+        self.useDice = True
+        self.residual = True
+        self.separable = True
+        self.usel1 = True
+        self.dilation = 2
         self.lr = lr
         self.decay = decay
-        self.quick_test = quick_test
+        self.entropy = entropy
+
+
         self.updateDescription()
 
         self.cores = os.cpu_count()
-        self.batch_size = 128
 
         self.makeDirs()
 
-        self.numEpochs = 2 if quick_test else 50
+        self.numEpisodes = 5000
 
         torch.manual_seed(42)
         torch.cuda.manual_seed(42)
@@ -49,36 +44,39 @@ class PreTrainer(object):
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-        self.createLoaders()
+        self.createEnv()
         self.createModel()
         self.createLearners()
         self.createAccumulators()
 
     def makeDirs(self):
-        os.makedirs("./models", exist_ok=True)
-        os.makedirs("./figs", exist_ok=True)
+        os.makedirs("./RLmodels", exist_ok=True)
+        os.makedirs("./RLfigs", exist_ok=True)
 
     def updateDescription(self):
-        if self.useDice:
-            self.descr = self.descr + "_dice"
-        if self.usel1:
-            self.descr = self.descr + "_l1"
-        if self.quick_test:
-            self.descr = self.descr + "_quick_test"
-        if self.dilation > 1:
-            self.descr = self.descr + "_dilated"
-        if self.residual:
-            self.descr = self.descr + "_res"
-        if self.separable:
-            self.descr = self.descr + "_sep"
+        if self.entropy:
+            self.descr = self.descr + "_entr"
 
-    def createLoaders(self):
+    def createEnv(self):
 
-        trainSet = OcclusionDataset("./Dataset/", "train")
-        valSet = OcclusionDataset("./Dataset/", "val")
+        shapenet_dataset = None
+        if useShapeNet:
+            # Load shapenet dataset
+            try:
+                # From Matyi's external drive
+                shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
+                shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
+            except:
+                try:
+                    shapenet_dataset = ShapeNetCore("./data/shapenet/shapenetcore", version=2)
+                except:
+                    shapenet_dataset = ShapeNetCore("/data/shapenet/shapenetcore", version=2)
 
-        self.trainLoader = DataLoader(trainSet, batch_size=self.batch_size, shuffle=True, num_workers=self.cores)
-        self.valLoader = DataLoader(valSet, batch_size=self.batch_size, shuffle=True, num_workers=self.cores)
+            print("Shapenetcore dataset loaded")
+
+        self.env = OcclusionEnv(shapenet_dataset)
+        self.env.renderMode = 'human'
+        print("class instantiated")
 
     def createModel(self):
 
@@ -88,8 +86,8 @@ class PreTrainer(object):
 
         self.criterion_segm = BinaryDiceLoss() if self.useDice else nn.BCELoss()
         self.criterion_grad = nn.SmoothL1Loss(beta=0.01) if self.usel1 else nn.MSELoss()
+
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.decay)
-        self.scheduler = lr_scheduler.CosineAnnealingLR(self.optimizer, self.numEpochs, self.lr * 0.1)
 
     def createAccumulators(self):
         self.segm_losses = []
@@ -97,17 +95,6 @@ class PreTrainer(object):
         self.losses = []
         self.accs = []
         self.ious = []
-        self.val_segm_losses = []
-        self.val_grad_losses = []
-        self.vallosses = []
-        self.valaccs = []
-        self.valious = []
-
-        self.bestIoU = 0
-        self.bestAcc = 0
-        self.bestLoss = 0
-        self.bestSegmLoss = 0
-        self.bestGradLoss = 0
 
     def train(self):
         running_loss = 0
@@ -124,7 +111,7 @@ class PreTrainer(object):
 
             self.optimizer.zero_grad()
 
-            _, occl_pred, grad_pred = self.model(img)
+            _, _, occl_pred, grad_pred = self.model(img)
             loss_segm = self.criterion_segm(occl_pred, occlusion)
             loss_grad = self.criterion_grad(grad_pred, grad)
             loss = loss_grad + loss_segm
@@ -173,7 +160,7 @@ class PreTrainer(object):
             img, occlusion, grad = img.cuda(), occlusion.cuda(), grad.cuda()
 
             with torch.no_grad():
-                _, occl_pred, grad_pred = self.model(img)
+                _, _, occl_pred, grad_pred = self.model(img)
                 loss_segm = self.criterion_segm(occl_pred, occlusion)
                 loss_grad = self.criterion_grad(grad_pred, grad)
                 loss = loss_grad + loss_segm

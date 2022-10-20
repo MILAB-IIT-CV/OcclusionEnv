@@ -1,3 +1,5 @@
+import random
+
 import gym
 from gym.spaces import Tuple, MultiDiscrete, Box, MultiBinary, Dict, Space, Discrete
 import torch
@@ -230,6 +232,14 @@ class OcclusionEnv():
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
         self.renderMode = "" #'human'
+
+    def seed(self, seed):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
     def reset(self, new_scene=True, radius=4.0, azimuth=1.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
