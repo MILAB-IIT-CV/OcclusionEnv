@@ -72,6 +72,7 @@ def train():
         print("Shapenetcore dataset loaded")
 
     env = OcclusionEnv(shapenet_dataset)
+    env.renderMode = 'human'
 
     # state space dimension
     state_dim = env.observation_space.shape[0]
@@ -196,6 +197,7 @@ def train():
             # select action with policy
             action = ppo_agent.select_action(state)
             state, reward, done, info = env.step(action)
+            #env.render()
 
             # saving reward and is_terminals
             ppo_agent.buffer.rewards.append(reward)

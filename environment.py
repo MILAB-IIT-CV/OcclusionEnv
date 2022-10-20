@@ -30,7 +30,7 @@ if torch.cuda.is_available():
     torch.cuda.set_device(device)
 else:
     device = torch.device("cpu")
-
+import contextlib
 # ShapeNet components
 from pytorch3d.datasets import (
     ShapeNetCore,
@@ -90,8 +90,8 @@ def load_default_meshes():
 
 def load_shapenet_meshes(dataset):
     # Set "randomize" to False to only select 1 category (category setup at line:57)
-    randomize_type = False
-    randomize_model = False
+    randomize_type = True
+    randomize_model = True
 
     # Set "mute" to True, if no printing is necessary
     mute = True
@@ -182,6 +182,8 @@ class OcclusionEnv():
         # Shapenet dataset to be passed as "data" when calling the constructor.
         self.shapenet_dataset = data
 
+        self.step_size = 0.05
+
         # Initialize a perspective camera.
         cameras = FoVPerspectiveCameras(device=self.device)
 
@@ -199,6 +201,7 @@ class OcclusionEnv():
             blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
             faces_per_pixel=100,
             cull_backfaces=True,
+            max_faces_per_bin=25000
         )
 
         # Create a silhouette mesh renderer by composing a rasterizer and a shader.
@@ -215,7 +218,8 @@ class OcclusionEnv():
             image_size=img_size,
             blur_radius=0.0,
             faces_per_pixel=1,
-            cull_backfaces=True
+            cull_backfaces=True,
+            max_faces_per_bin=25000
         )
         # We can add a point light in front of the object.
         lights = PointLights(device=self.device, location=((2.0, 2.0, -2.0),))
@@ -241,7 +245,7 @@ class OcclusionEnv():
         torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
 
-    def reset(self, new_scene=True, radius=4.0, azimuth=1.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
+    def reset(self, new_scene=True, radius=4.0, azimuth=0.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
         if new_scene:
             self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
@@ -282,35 +286,37 @@ class OcclusionEnv():
     def step(self, action):
 
         self.detach()
+        with contextlib.redirect_stdout(None):
+            action = action/np.linalg.norm(action)
 
-        self.elevation += action[0]
-        self.azimuth += action[1]
+            self.elevation += action[0]*self.step_size
+            self.azimuth += action[1]*self.step_size
 
-        self.camera_position[0] = self.radius * torch.sin(self.azimuth) * torch.cos(self.elevation)
-        self.camera_position[1] = self.radius * torch.sin(self.azimuth) * torch.sin(self.elevation)
-        self.camera_position[2] = self.radius * torch.cos(self.azimuth)
+            self.camera_position[0] = self.radius * torch.sin(self.azimuth) * torch.cos(self.elevation)
+            self.camera_position[1] = self.radius * torch.sin(self.azimuth) * torch.sin(self.elevation)
+            self.camera_position[2] = self.radius * torch.cos(self.azimuth)
 
-        R = look_at_rotation(self.camera_position[None, :], device=self.device)  # (1, 3, 3)
-        T = -torch.bmm(R.transpose(1, 2), self.camera_position[None, :, None])[:, :, 0]  # (1, 3)
+            R = look_at_rotation(self.camera_position[None, :], device=self.device)  # (1, 3, 3)
+            T = -torch.bmm(R.transpose(1, 2), self.camera_position[None, :, None])[:, :, 0]  # (1, 3)
 
-        image1 = self.silhouette_renderer(meshes_world=self.meshes[1].clone(), R=R, T=T)
-        image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
-        self.image = image1 * image2
+            image1 = self.silhouette_renderer(meshes_world=self.meshes[1].clone(), R=R, T=T)
+            image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
+            self.image = image1 * image2
 
-        observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
-        observation = observation.permute(0, 3, 1, 2)
-        depth = depth.permute(0, 3, 1, 2)
-        observation[:, 3, :, :] = depth
+            observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+            observation = observation.permute(0, 3, 1, 2)
+            depth = depth.permute(0, 3, 1, 2)
+            observation[:, 3, :, :] = depth
 
-        # Calculate the silhouette loss
-        loss = torch.sum((self.image[..., 3]) ** 2)
-        reward = self.fullReward - loss
+            # Calculate the silhouette loss
+            loss = torch.sum((self.image[..., 3]) ** 2)
+            reward = self.fullReward - loss
 
-        self.fullReward = loss.detach()
+            self.fullReward = loss.detach()
 
-        finished = (self.fullReward < 0.1)
+            finished = (self.fullReward < 0.1)
 
-        info = {'full_state': self.image, 'position': self.camera_position, 'full_reward': self.fullReward}
+            info = {'full_state': self.image, 'position': self.camera_position, 'full_reward': self.fullReward}
 
         return observation, reward, finished, info
 
