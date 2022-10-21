@@ -161,7 +161,7 @@ class FullNetwork(nn.Module):
         last_feature = features[0]
         pooled_features = self.pool(last_feature).squeeze()
 
-        grad_predictions = torch.tanh(self.gradPredictor(pooled_features))
+        grad_predictions = self.gradPredictor(pooled_features)
 
         return pooled_features, segm_predictions, grad_predictions
 

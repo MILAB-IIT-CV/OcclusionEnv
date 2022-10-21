@@ -1,3 +1,5 @@
+import random
+
 import gym
 from gym.spaces import Tuple, MultiDiscrete, Box, MultiBinary, Dict, Space, Discrete
 import torch
@@ -29,7 +31,7 @@ if torch.cuda.is_available():
     torch.cuda.set_device(device)
 else:
     device = torch.device("cpu")
-
+import contextlib
 # ShapeNet components
 from pytorch3d.datasets import (
     ShapeNetCore,
@@ -86,7 +88,6 @@ def load_default_meshes():
     )
 
     return [full_mesh, teapot_mesh, teapot2_mesh]
-
 
 def load_shapenet_meshes(dataset, num_objects=3):
     # Set "randomize" to False to only select 1 category
@@ -317,40 +318,38 @@ class OcclusionEnv():
     def step(self, action):
 
         self.detach()
+        with contextlib.redirect_stdout(None):
+            action = action/np.linalg.norm(action)
 
-        action_norm = torch.norm(action)
+            self.elevation += action[0]*self.step_size
+            self.azimuth += action[1]*self.step_size
 
-        normalized_action = action/action_norm if action_norm else action
+            self.camera_position[0] = self.radius * torch.sin(self.azimuth) * torch.cos(self.elevation)
+            self.camera_position[1] = self.radius * torch.sin(self.azimuth) * torch.sin(self.elevation)
+            self.camera_position[2] = self.radius * torch.cos(self.azimuth)
 
-        self.elevation += normalized_action[0]*self.step_size
-        self.azimuth += normalized_action[1]*self.step_size
+            R = look_at_rotation(self.camera_position[None, :], device=self.device)  # (1, 3, 3)
+            T = -torch.bmm(R.transpose(1, 2), self.camera_position[None, :, None])[:, :, 0]  # (1, 3)
 
-        self.camera_position[0] = self.radius * torch.sin(self.azimuth) * torch.cos(self.elevation)
-        self.camera_position[1] = self.radius * torch.sin(self.azimuth) * torch.sin(self.elevation)
-        self.camera_position[2] = self.radius * torch.cos(self.azimuth)
 
-        R = look_at_rotation(self.camera_position[None, :], device=self.device)  # (1, 3, 3)
-        T = -torch.bmm(R.transpose(1, 2), self.camera_position[None, :, None])[:, :, 0]  # (1, 3)
+            image1 = self.silhouette_renderer(meshes_world=self.meshes[1].clone(), R=R, T=T)
+            image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
+            image3 = self.silhouette_renderer(meshes_world=self.meshes[3].clone(), R=R, T=T)
+            self.image = (image1 * image2) + (image2 * image3) + (image1 * image3)
+            observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+            observation = observation.permute(0, 3, 1, 2)
+            depth = depth.permute(0, 3, 1, 2)
+            observation[:, 3, :, :] = depth
 
-        image1 = self.silhouette_renderer(meshes_world=self.meshes[1].clone(), R=R, T=T)
-        image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
-        image3 = self.silhouette_renderer(meshes_world=self.meshes[3].clone(), R=R, T=T)
-        self.image = (image1 * image2) + (image2 * image3) + (image1 * image3)
+            # Calculate the silhouette loss
+            loss = torch.sum((self.image[..., 3]) ** 2)
+            reward = self.fullReward - loss
 
-        observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
-        observation = observation.permute(0, 3, 1, 2)
-        depth = depth.permute(0, 3, 1, 2)
-        observation[:, 3, :, :] = depth
+            self.fullReward = loss.detach()
 
-        # Calculate the silhouette loss
-        loss = torch.sum((self.image[..., 3]) ** 2)
-        reward = self.fullReward - loss
+            finished = (self.fullReward < 0.1)
 
-        self.fullReward = loss.detach()
-
-        finished = (self.fullReward < 0.1)
-
-        info = {'full_state': self.image, 'position': self.camera_position, 'full_reward': self.fullReward}
+            info = {'full_state': self.image, 'position': self.camera_position, 'full_reward': self.fullReward}
 
         return observation, reward, finished, info
 
