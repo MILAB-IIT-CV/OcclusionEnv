@@ -162,10 +162,13 @@ class FullNetwork(nn.Module):
         pooled_features = self.pool(last_feature).squeeze()
 
         grad_predictions = torch.tanh(self.gradPredictor(pooled_features))
-        action_scores = torch.tanh(self.action_head(pooled_features))
-        value = self.value_head(pooled_features)
 
-        return action_scores, value, segm_predictions, grad_predictions
+        return pooled_features, segm_predictions, grad_predictions
+
+    def act(self, pooled_features):
+        action_scores = self.action_head(pooled_features.detach())
+        value = self.value_head(pooled_features.detach())
+        return action_scores, value
 
 
 '''class Robot(nn.Module):
