@@ -1,3 +1,4 @@
+import datetime
 import os
 
 import numpy
@@ -20,8 +21,8 @@ from model import Segmenter, FullNetwork
 import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
-    export_env_gif = False
-    export_pred_gif = False
+    export_env_gif = True
+    export_pred_gif = True
 
     # Set the cuda device
     if torch.cuda.is_available():
@@ -36,7 +37,10 @@ if __name__ == '__main__':
         shapenetdir = "/Volumes/MacMiklos/M/BME/2021_12-OcclusionEnvironment/Shapenet/"
         shapenet_dataset = ShapeNetCore(shapenetdir, version=2)
     except:
-        shapenet_dataset = ShapeNetCore("/data/shapenet/shapenetcore", version=2)
+        try:
+            shapenet_dataset = ShapeNetCore("./data/shapenet/shapenetcore", version=2)
+        except:
+            shapenet_dataset = ShapeNetCore("/data/shapenet/shapenetcore", version=2)
 
     print("Shapenetcore dataset loaded")
 
@@ -51,13 +55,27 @@ if __name__ == '__main__':
     # number of steps and azimuth range
     azimuth_low = -310  # [-pi/32]
     azimuth_high = 311  # [pi/32]
-    azimuth_step_size = 10      # 10: [pi/992]
+    azimuth_step_size = 100      # 10: [pi/992]
+
+    # # for testing
+    # azimuth_low = -4600
+    # azimuth_high = 0
+    # azimuth_step_size = abs(azimuth_low) + 10
+
     num_iters = azimuth_high - azimuth_low
     num_iters /= azimuth_step_size
     num_iters = np.round_(num_iters)
 
     # maximum number of allowed steps per initial azimuth value
     max_step = 2000
+
+    # directory for current results
+    base_path = os.path.join("./results/" + str(datetime.datetime.now()))
+    try:
+        os.mkdir(base_path)
+
+    except:
+        pass
 
     for iteration in tqdm(range(azimuth_low, azimuth_high, azimuth_step_size)):
 
@@ -67,7 +85,7 @@ if __name__ == '__main__':
         obs = env.reset(new_scene=False, azimuth=current_azimuth)
 
         # create folder for output
-        output_path = os.path.join("./results/current_result/" + str(current_azimuth))
+        output_path = os.path.join(base_path + "/" + str(current_azimuth))
         try:
             os.mkdir(output_path)
 
@@ -87,6 +105,7 @@ if __name__ == '__main__':
         lr = 1e-6
         rewards = []
         fullRewards = []
+        print()
         print(f"Current azimuth value: {current_azimuth}")
 
         # raw gradient loop
@@ -144,7 +163,7 @@ if __name__ == '__main__':
         if separable:
             descr = descr + "_sep"
 
-        model = torch.load("./models/bestSegModel_" + descr + ".pt")
+        model = torch.load("./models/bestSegModel_final2" + descr + ".pt")
         model.train(False)
 
         action = nn.Parameter(torch.tensor([0., 0.]))
@@ -152,7 +171,7 @@ if __name__ == '__main__':
         fullRewards = []
 
         # model loop
-        for i in range(max_step+70):
+        for i in range(max_step):
             print(i, end="\r")
             if action.grad is not None:
                 action.grad.zero_()
@@ -162,7 +181,7 @@ if __name__ == '__main__':
 
             with torch.no_grad():
                 image = obs.cuda()
-                _, _, _, pred_grad = model(image)
+                _, _, pred_grad = model(image)
 
             action = - step_lr * pred_grad
 
@@ -196,12 +215,12 @@ if __name__ == '__main__':
         if export_pred_gif:
             writer_model.close()
 
-    file = open("results/current_result/iterations_raw_3.txt", "w")
+    file = open(os.path.join(base_path + "/" + "iterations_raw_3.txt"), "w")
     dict_string = repr(iterations_raw)
     file.write(dict_string)
     file.close()
 
-    file = open("results/current_result/iterations_model_3.txt", "w")
+    file = open(os.path.join(base_path + "/" + "iterations_model_3.txt"), "w")
     dict_string = repr(iterations_model)
     file.write(dict_string)
     file.close()
