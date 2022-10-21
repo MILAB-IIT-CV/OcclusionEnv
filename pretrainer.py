@@ -124,7 +124,7 @@ class PreTrainer(object):
 
             self.optimizer.zero_grad()
 
-            _, _, occl_pred, grad_pred = self.model(img)
+            _, occl_pred, grad_pred = self.model(img)
             loss_segm = self.criterion_segm(occl_pred, occlusion)
             loss_grad = self.criterion_grad(grad_pred, grad)
             loss = loss_grad + loss_segm
@@ -173,7 +173,7 @@ class PreTrainer(object):
             img, occlusion, grad = img.cuda(), occlusion.cuda(), grad.cuda()
 
             with torch.no_grad():
-                _, _, occl_pred, grad_pred = self.model(img)
+                _, occl_pred, grad_pred = self.model(img)
                 loss_segm = self.criterion_segm(occl_pred, occlusion)
                 loss_grad = self.criterion_grad(grad_pred, grad)
                 loss = loss_grad + loss_segm
