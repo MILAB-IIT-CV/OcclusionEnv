@@ -48,7 +48,8 @@ if __name__ == '__main__':
         print("Shapenetcore dataset loaded")
 
     azimuth_randn = np.pi / 32  # 5,625 deg
-    azimuth_randn = np.pi / 2  # 90 deg
+    azimuth_randn = np.pi/4  # 90 deg
+    #azimuth_randn = 0  # 0 deg
 
     # azimuth_randn np.random.default_rng().uniform(low=-np.pi/32, high=np.pi/32)
 
@@ -70,7 +71,7 @@ if __name__ == '__main__':
     filename_output = "./optimization_demo_depth.gif"
     writer3 = imageio.get_writer(filename_output, mode='I', duration=0.3)
 
-    lr = 1e-6
+    lr = 1e-4
 
     rewards = []
     fullRewards = []
@@ -88,7 +89,7 @@ if __name__ == '__main__':
             continue
         with torch.no_grad():
             action += lr * action.grad
-        env.render()
+        #env.render()
         rewards.append(reward.cpu().item())
         fullRewards.append(info['full_reward'].cpu().item())
 
@@ -112,13 +113,13 @@ if __name__ == '__main__':
             print(f"finished after {i} iteration(s).")
             break
 
-    plt.figure()
+    '''plt.figure()
     plt.subplot(1, 2, 1)
     plt.plot(rewards)
     plt.subplot(1, 2, 2)
     plt.plot(fullRewards)
     plt.show()
-    plt.savefig("Rewards.png")
+    plt.savefig("Rewards.png")'''
 
     writer.close()
     writer2.close()
