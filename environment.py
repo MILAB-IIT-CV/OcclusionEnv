@@ -106,7 +106,7 @@ def load_shapenet_meshes(dataset, num_objects=3):
             category_randn = np.random.default_rng().integers(low=len(dataset.synset_dict))
             category_id = list(dataset.synset_dict.keys())[category_randn]
         else:
-            category_name = "table"  # "bus" "chair" "table" "microwaves" "rifle" "chair" "airplane"
+            category_name = "airplane"  # "bus" "chair" "table" "microwaves" "rifle" "chair" "airplane"
             category_id = dataset.synset_inv[category_name]
 
         low_idx = dataset.synset_start_idxs[category_id]
@@ -205,6 +205,8 @@ class OcclusionEnv():
         self.metadata = "Blablabla"
         # :D
 
+        self.img_size = img_size
+
         if torch.cuda.is_available():
             self.device = torch.device("cuda:0")
         else:
@@ -215,6 +217,21 @@ class OcclusionEnv():
 
         self.step_size = 0.05
 
+        self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
+        self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
+        self.renderMode = ""    # 'human'
+
+    def seed(self, seed):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+    def createRenderers(self, mesh_size):
+
+        faces_per_bin = max(min(mesh_size, 150000), 10000)
         # Initialize a perspective camera.
         cameras = FoVPerspectiveCameras(device=self.device)
 
@@ -228,11 +245,11 @@ class OcclusionEnv():
         # explanations of these parameters. Refer to docs/notes/renderer.md for an explanation of
         # the difference between naive and coarse-to-fine rasterization.
         raster_settings = RasterizationSettings(
-            image_size=img_size,
+            image_size=self.img_size,
             blur_radius=np.log(1. / 1e-4 - 1.) * blend_params.sigma,
             faces_per_pixel=100,
             cull_backfaces=True,
-            max_faces_per_bin=25000
+            max_faces_per_bin=faces_per_bin
         )
 
         # Create a silhouette mesh renderer by composing a rasterizer and a shader.
@@ -246,11 +263,11 @@ class OcclusionEnv():
 
         # We will also create a Phong renderer. This is simpler and only needs to render one face per pixel.
         raster_settings = RasterizationSettings(
-            image_size=img_size,
+            image_size=self.img_size,
             blur_radius=0.0,
             faces_per_pixel=1,
             cull_backfaces=True,
-            max_faces_per_bin=25000
+            max_faces_per_bin=faces_per_bin
         )
         # We can add a point light in front of the object.
         lights = PointLights(device=self.device, location=((2.0, 2.0, -2.0),))
@@ -264,22 +281,13 @@ class OcclusionEnv():
             shader=HardFlatShader(device=self.device, cameras=cameras, lights=lights),
         )
 
-        self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
-        self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
-        self.renderMode = 'human'
-
-    def seed(self, seed):
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-
     def reset(self, new_scene=True, radius=4.0, azimuth=0.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
         if new_scene:
             self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
+
+        mesh_size = max([m.faces_list()[0].shape[0] for m in self.meshes])
+        self.createRenderers(mesh_size)
 
         self.fullReward = 0
         self.camera_position = torch.zeros(3).to(self.device)
