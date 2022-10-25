@@ -161,7 +161,7 @@ class PPO:
             self.buffer.actions.append(action)
             self.buffer.logprobs.append(action_logprob)
 
-            return action.detach().cpu().numpy().flatten()
+            return action.detach().flatten()
         else:
             with torch.no_grad():
                 state = torch.FloatTensor(state).to(device)
