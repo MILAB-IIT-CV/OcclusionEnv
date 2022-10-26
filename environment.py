@@ -220,6 +220,7 @@ class OcclusionEnv():
         self.observation_space = Box(0, 1, shape=(4, img_size, img_size))
         self.action_space = Box(low=-0.1, high=0.1, shape=(2,))
         self.renderMode = ""    # 'human'
+        self.image = None
 
     def seed(self, seed):
         random.seed(seed)
@@ -283,27 +284,41 @@ class OcclusionEnv():
 
     def reset(self, new_scene=True, radius=4.0, azimuth=0.0, elevation=0.0): # radius=4, azimuth=randn, elevation=0
 
-        if new_scene:
-            self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
+        max_resets = 10
+        resets = 0
+        while True:
+            resets += 1
+            if new_scene:
+                self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
 
-        mesh_size = max([m.faces_list()[0].shape[0] for m in self.meshes])
-        self.createRenderers(mesh_size)
+            mesh_size = max([m.faces_list()[0].shape[0] for m in self.meshes])
+            self.createRenderers(mesh_size)
 
-        self.fullReward = 0
-        self.camera_position = torch.zeros(3).to(self.device)
+            self.fullReward = 0
+            self.camera_position = torch.zeros(3).to(self.device)
 
-        self.radius = torch.tensor([radius]).float().to(self.device)
-        self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
-        self.azimuth = torch.tensor([azimuth]).float().to(self.device)  # angle of elevation in degrees
+            self.radius = torch.tensor([radius]).float().to(self.device)
+            self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
+            self.azimuth = torch.tensor([azimuth]).float().to(self.device)  # angle of elevation in degrees
 
-        R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, degrees=False, device=self.device)
+            R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, degrees=False, device=self.device)
 
-        observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
-        observation = observation.permute(0, 3, 1, 2)
-        depth = depth.permute(0, 3, 1, 2)
-        observation[:, 3, :, :] = depth
+            observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+            observation = observation.permute(0, 3, 1, 2)
+            depth = depth.permute(0, 3, 1, 2)
+            observation[:, 3, :, :] = depth
 
-        return observation
+            # calculate initial loss to see if occlusion exists
+            image1 = self.silhouette_renderer(meshes_world=self.meshes[1].clone(), R=R, T=T)
+            image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
+            image3 = self.silhouette_renderer(meshes_world=self.meshes[3].clone(), R=R, T=T)
+            self.image = (image1 * image2) + (image2 * image3) + (image1 * image3)
+
+            loss = torch.sum((self.image[..., 3]) ** 2)
+
+            # return observation if occlusion exists - or timeout is reached
+            if loss > 0.1 or resets == max_resets:
+                return observation
 
     def render(self):
 
