@@ -8,6 +8,7 @@ from PPO import PPO
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 from environment import OcclusionEnv
 from pytorch3d.datasets import ShapeNetCore
+import tqdm
 useShapeNet = True
 
 ################################### Training ###################################
@@ -20,16 +21,16 @@ def train():
     has_continuous_action_space = True  # continuous action space; else discrete
 
     max_ep_len = 50                   # max timesteps in one episode
-    max_training_timesteps = int(3e5)   # break training loop if timeteps > max_training_timesteps
+    max_training_timesteps = int(2e4)   # break training loop if timeteps > max_training_timesteps
 
     print_freq = max_ep_len * 4        # print avg reward in the interval (in num timesteps)
     log_freq = max_ep_len * 2           # log avg reward in the interval (in num timesteps)
-    save_model_freq = int(1e5)          # save model frequency (in num timesteps)
+    save_model_freq = int(5e3)          # save model frequency (in num timesteps)
 
     action_std = 0.6                    # starting std for action distribution (Multivariate Normal)
     action_std_decay_rate = 0.05        # linearly decay action_std (action_std = action_std - action_std_decay_rate)
     min_action_std = 0.1                # minimum action_std (stop decay after action_std <= min_action_std)
-    action_std_decay_freq = int(2.5e5)  # action_std decay frequency (in num timesteps)
+    action_std_decay_freq = int(1.5e4)  # action_std decay frequency (in num timesteps)
     #####################################################
 
     ## Note : print/log frequencies should be > than max_ep_len
@@ -72,7 +73,7 @@ def train():
         print("Shapenetcore dataset loaded")
 
     env = OcclusionEnv(shapenet_dataset)
-    env.renderMode = 'human'
+    env.renderMode = "" # 'human'
 
     # state space dimension
     state_dim = env.observation_space.shape[0]
@@ -107,7 +108,7 @@ def train():
     #####################################################
 
     ################### checkpointing ###################
-    run_num_pretrained = 0      #### change this to prevent overwriting weights in same env_name folder
+    run_num_pretrained = run_num      #### change this to prevent overwriting weights in same env_name folder
 
     directory = "PPO_preTrained"
     if not os.path.exists(directory):
@@ -118,7 +119,7 @@ def train():
           os.makedirs(directory)
 
 
-    checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
+    checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num)
     print("save checkpoint path : " + checkpoint_path)
     #####################################################
 
@@ -174,11 +175,9 @@ def train():
 
     # logging file
     log_f = open(log_f_name,"w+")
-    log_f.write('episode,timestep,reward\n')
+    log_f.write('episode,timestep,reward,running_reward,length\n')
 
     # printing and logging variables
-    print_running_reward = 0
-    print_running_episodes = 0
 
     log_running_reward = 0
     log_running_episodes = 0
@@ -198,13 +197,14 @@ def train():
             action = ppo_agent.select_action(state)
             state, reward, done, info = env.step(action)
             #env.render()
+            #print(reward)
 
             # saving reward and is_terminals
-            ppo_agent.buffer.rewards.append(reward)
+            ppo_agent.buffer.rewards.append(reward.detach())
             ppo_agent.buffer.is_terminals.append(done)
 
-            time_step +=1
-            current_ep_reward += reward
+            time_step += 1
+            current_ep_reward += reward.detach()
 
             # update PPO agent
             if time_step % update_timestep == 0:
@@ -214,30 +214,6 @@ def train():
             if has_continuous_action_space and time_step % action_std_decay_freq == 0:
                 ppo_agent.decay_action_std(action_std_decay_rate, min_action_std)
 
-            # log in logging file
-            if time_step % log_freq == 0:
-
-                # log average reward till last episode
-                log_avg_reward = log_running_reward / log_running_episodes
-                log_avg_reward = round(log_avg_reward.cpu().item(), 4)
-
-                log_f.write('{},{},{}\n'.format(i_episode, time_step, log_avg_reward))
-                log_f.flush()
-
-                log_running_reward = 0
-                log_running_episodes = 0
-
-            # printing average reward
-            if time_step % print_freq == 0:
-
-                # print average reward till last episode
-                print_avg_reward = print_running_reward / print_running_episodes
-                print_avg_reward = round(print_avg_reward.cpu().item(), 2)
-
-                print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {}".format(i_episode, time_step, print_avg_reward))
-
-                print_running_reward = 0
-                print_running_episodes = 0
 
             # save model weights
             if time_step % save_model_freq == 0:
@@ -252,13 +228,24 @@ def train():
             if done:
                 break
 
-        print_running_reward += current_ep_reward
-        print_running_episodes += 1
-
-        log_running_reward += current_ep_reward
-        log_running_episodes += 1
-
         i_episode += 1
+
+        # log average reward till last episode
+        log_avg_reward = current_ep_reward
+        log_avg_reward = round(log_avg_reward.cpu().item(), 4)
+        running_reward = 0.95*running_reward + 0.05*current_ep_reward if i_episode > 1 else current_ep_reward
+        log_running_reward = round(running_reward.cpu().item(), 4)
+
+        log_f.write('{},{},{},{},{}\n'.format(i_episode, time_step, log_avg_reward, log_running_reward, t))
+        log_f.flush()
+
+        # print average reward till last episode
+        print_avg_reward = current_ep_reward
+        print_avg_reward = round(print_avg_reward.cpu().item(), 2)
+        print_running_reward = round(running_reward.cpu().item(), 2)
+
+        print("Episode: {} \t Length: {} \t Timestep: {} \t Average Reward: {} \t Running Reward: {}".format(i_episode, t, time_step, print_avg_reward, print_running_reward))
+
 
     log_f.close()
     env.close()
