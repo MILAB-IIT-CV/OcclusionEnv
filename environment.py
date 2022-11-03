@@ -205,6 +205,7 @@ class OcclusionEnv():
         self.metadata = "Blablabla"
         # :D
 
+        self.normWithObjectSize = False
         self.img_size = img_size
 
         if torch.cuda.is_available():
@@ -232,7 +233,7 @@ class OcclusionEnv():
 
     def createRenderers(self, mesh_size):
 
-        faces_per_bin = max(min(mesh_size, 150000), 10000)
+        faces_per_bin = max(mesh_size, 10000)
         # Initialize a perspective camera.
         cameras = FoVPerspectiveCameras(device=self.device)
 
@@ -287,38 +288,46 @@ class OcclusionEnv():
         max_resets = 10
         resets = 0
         while True:
-            resets += 1
-            if new_scene:
-                self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
+            try:
+                resets += 1
+                if new_scene:
+                    self.meshes = load_shapenet_meshes(dataset=self.shapenet_dataset) if self.shapenet_dataset is not None else load_default_meshes()
 
-            mesh_size = max([m.faces_list()[0].shape[0] for m in self.meshes])
-            self.createRenderers(mesh_size)
+                mesh_size = max([m.faces_list()[0].shape[0] for m in self.meshes])
+                if mesh_size > 250000:
+                    continue
+                self.createRenderers(mesh_size)
 
-            self.fullReward = 0
-            self.camera_position = torch.zeros(3).to(self.device)
+                #self.fullReward = 0
+                self.camera_position = torch.zeros(3).to(self.device)
 
-            self.radius = torch.tensor([radius]).float().to(self.device)
-            self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
-            self.azimuth = torch.tensor([azimuth]).float().to(self.device)  # angle of elevation in degrees
+                self.radius = torch.tensor([radius]).float().to(self.device)
+                self.elevation = torch.tensor([elevation]).float().to(self.device)  # angle of elevation in degrees
+                self.azimuth = torch.tensor([azimuth]).float().to(self.device)  # angle of elevation in degrees
 
-            R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, degrees=False, device=self.device)
+                R, T = look_at_view_transform(self.radius, self.elevation, self.azimuth, degrees=False, device=self.device)
 
-            observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
-            observation = observation.permute(0, 3, 1, 2)
-            depth = depth.permute(0, 3, 1, 2)
-            observation[:, 3, :, :] = depth
+                observation, depth = self.phong_renderer(meshes_world=self.meshes[0].clone(), R=R, T=T)
+                observation = observation.permute(0, 3, 1, 2)
+                depth = depth.permute(0, 3, 1, 2)
+                observation[:, 3, :, :] = depth
 
-            # calculate initial loss to see if occlusion exists
-            image1 = self.silhouette_renderer(meshes_world=self.meshes[1].clone(), R=R, T=T)
-            image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
-            image3 = self.silhouette_renderer(meshes_world=self.meshes[3].clone(), R=R, T=T)
-            self.image = (image1 * image2) + (image2 * image3) + (image1 * image3)
+                # calculate initial loss to see if occlusion exists
+                image1 = self.silhouette_renderer(meshes_world=self.meshes[1].clone(), R=R, T=T)
+                image2 = self.silhouette_renderer(meshes_world=self.meshes[2].clone(), R=R, T=T)
+                image3 = self.silhouette_renderer(meshes_world=self.meshes[3].clone(), R=R, T=T)
+                self.image = (image1 * image2) + (image2 * image3) + (image1 * image3)
+                self.objects = image1 + image2 + image3
 
-            loss = torch.sum((self.image[..., 3]) ** 2)
+                loss = torch.sum((self.image[..., 3]) ** 2)
+                self.fullReward = loss.detach()
+                self.objectMass = torch.sum((self.objects[..., 3]) ** 2).detach() + 1 if self.normWithObjectSize else loss.detach() + 1
 
-            # return observation if occlusion exists - or timeout is reached
-            if loss > 0.1 or resets == max_resets:
-                return observation
+                # return observation if occlusion exists - or timeout is reached
+                if loss > 0.1 or resets == max_resets:
+                    return observation
+            except:
+                continue
 
     def render(self):
 
@@ -336,6 +345,9 @@ class OcclusionEnv():
             cv2.waitKey(25)
         else:
             return observation, depth
+
+    def close(self):
+        pass
 
     def step(self, action):
 
@@ -372,6 +384,12 @@ class OcclusionEnv():
         self.fullReward = loss.detach()
 
         finished = (self.fullReward < 0.1)
+        reward /= self.objectMass
+
+        if finished:
+            reward += 5
+        else:
+            reward -= 0.2
 
         info = {'full_state': self.image, 'position': self.camera_position, 'full_reward': self.fullReward}
 
