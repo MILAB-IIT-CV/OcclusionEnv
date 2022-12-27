@@ -11,7 +11,7 @@ def makePlot(best_results, name, s, bins = 30):
     #axes[0, 0].get_shared_x_axes().join(axes[0, 0], axes[1, 0])
 
     best.plot_posterior(best_results,
-                   'Difference of means',
+                   'Mean',
                    ax=axes,
                    bins=bins,
                    title='Difference of means',
@@ -40,9 +40,9 @@ def makePlot(best_results, name, s, bins = 30):
 
 def getValsFromTest(best_results):
 
-    hdi_min, hdi_max = best_results.hdi("Difference of means", 0.95)
+    hdi_min, hdi_max = best_results.hdi("Mean", 0.95)
 
-    trace = best_results.trace['Difference of means']
+    trace = best_results.trace['Mean']
 
     mean = trace.mean()
     median = np.median(trace)
@@ -74,36 +74,64 @@ if __name__ == '__main__':
 
     file = open(os.path.join(base_path + "/" + "iterations_model_3.txt"), "r")
     iterations_rl = file.read()
-    iterations_rl = np.array(list(ast.literal_eval(iterations_rl).values()))
+    iterations_rl = np.array(list(ast.literal_eval(iterations_rl).values())) + np.random.rand(50)
     file.close()
+
+    vals = np.zeros((6,4))
 
 
     print("Running BEST between Random and Raw")
-    best_out = best.analyze_two(iterations_random, iterations_raw)
+    best_out = best.analyze_one(iterations_random - iterations_raw)
     hdi_min, hdi_max, ratio, mean, median = getValsFromTest(best_out)
+    vals[0,0] = hdi_min
+    vals[0,1] = hdi_max
+    vals[0,2] = mean
+    vals[0,3] = ratio
     makePlot(best_out, base_path, "RandVSRaw")
 
     print("Running BEST between Random and Model")
-    best_out = best.analyze_two(iterations_random, iterations_model)
+    best_out = best.analyze_one(iterations_random - iterations_model)
     hdi_min, hdi_max, ratio, mean, median = getValsFromTest(best_out)
+    vals[1,0] = hdi_min
+    vals[1,1] = hdi_max
+    vals[1,2] = mean
+    vals[1,3] = ratio
     makePlot(best_out, base_path, "RandVSModel")
 
     print("Running BEST between Random and RL")
-    best_out = best.analyze_two(iterations_random, iterations_rl)
+    best_out = best.analyze_one(iterations_random - iterations_rl)
     hdi_min, hdi_max, ratio, mean, median = getValsFromTest(best_out)
+    vals[2,0] = hdi_min
+    vals[2,1] = hdi_max
+    vals[2,2] = mean
+    vals[2,3] = ratio
     makePlot(best_out, base_path, "RandVSRL")
 
     print("Running BEST between Raw and Model")
-    best_out = best.analyze_two(iterations_raw, iterations_model)
+    best_out = best.analyze_one(iterations_raw - iterations_model)
     hdi_min, hdi_max, ratio, mean, median = getValsFromTest(best_out)
+    vals[3,0] = hdi_min
+    vals[3,1] = hdi_max
+    vals[3,2] = mean
+    vals[3,3] = ratio
     makePlot(best_out, base_path, "RawVSModel")
 
     print("Running BEST between Raw and RL")
-    best_out = best.analyze_two(iterations_raw, iterations_rl)
+    best_out = best.analyze_one(iterations_raw - iterations_rl)
     hdi_min, hdi_max, ratio, mean, median = getValsFromTest(best_out)
+    vals[4,0] = hdi_min
+    vals[4,1] = hdi_max
+    vals[4,2] = mean
+    vals[4,3] = ratio
     makePlot(best_out, base_path, "RawVSRL")
 
     print("Running BEST between Model and RL")
-    best_out = best.analyze_two(iterations_model, iterations_rl)
+    best_out = best.analyze_one(iterations_model - iterations_rl)
     hdi_min, hdi_max, ratio, mean, median = getValsFromTest(best_out)
+    vals[5,0] = hdi_min
+    vals[5,1] = hdi_max
+    vals[5,2] = mean
+    vals[5,3] = ratio
     makePlot(best_out, base_path, "ModelVSRL")
+
+    np.savetxt(base_path + "/bttest.csv", vals.T, header="RandomVSRaw, RandomVsModel, RandomVSRL, RawVSModel, RawVSRL, ModelVSRL")
