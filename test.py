@@ -24,6 +24,7 @@ if __name__ == '__main__':
 
     export_env_gif = True
     export_pred_gif = True
+    export_rl_gif = True
 
     # Set the cuda device
     if torch.cuda.is_available():
@@ -49,6 +50,7 @@ if __name__ == '__main__':
     iterations_raw = {}
     iterations_random = {}
     iterations_model = {}
+    iterations_rl = {}
 
     num_episodes = 10
     max_step = 50
@@ -82,9 +84,12 @@ if __name__ == '__main__':
         if export_pred_gif:
             filename_output_model = os.path.join(output_path + "/" + str(iteration) + "_gradient_pred.gif")
             writer_model = imageio.get_writer(filename_output_model, mode="I", duration=0.3)
+        if export_rl_gif:
+            filename_output_rl = os.path.join(output_path + "/" + str(iteration) + "_rl.gif")
+            writer_rl = imageio.get_writer(filename_output_rl, mode="I", duration=0.3)
 
         # with raw gradient
-        action = nn.Parameter(torch.tensor([0., 0.]))
+        '''action = nn.Parameter(torch.tensor([0., 0.]))
         lr = 1
         rewards = []
         fullRewards = []
@@ -209,7 +214,45 @@ if __name__ == '__main__':
 
             elif i >= max_step-1:
                 print(f"Haven't finished in {i} steps. Continuing.")
-                iterations_model[iteration] = i + 1
+                iterations_model[iteration] = i + 1'''
+
+        model = torch.load("./PPO_preTrained/OcclusionEnv/PPO_OcclusionEnv_42_36.pth")
+        model.train(False)
+
+        action = nn.Parameter(torch.tensor([0., 0.]))
+        rewards = []
+        fullRewards = []
+
+        # model loop
+        for i in range(max_step):
+            print(i, end="\r")
+
+            obs, reward, finished, info = env.step(action)
+
+            env.render()
+
+            with torch.no_grad():
+                image = obs.cuda()
+                action = model.select_action(image)
+                #action, _, _ = model(image)
+
+            # output
+            rewards.append(reward.cpu().item())
+            fullRewards.append(info['full_reward'].cpu().item())
+
+            if export_rl_gif:
+                image = obs[0].detach().permute(1, 2, 0).cpu().numpy()
+                image = img_as_ubyte(image[..., 2])
+                writer_rl.append_data(image)
+
+            if finished:
+                iterations_rl[iteration] = i + 1
+                print(f"Finished after {i} iteration(s) with predicted gradients.")
+                break
+
+            elif i >= max_step - 1:
+                print(f"Haven't finished in {i} steps. Continuing.")
+                iterations_rl[iteration] = i + 1
 
         plt.figure()
         plt.subplot(1, 2, 1)
@@ -235,5 +278,10 @@ if __name__ == '__main__':
 
     file = open(os.path.join(base_path + "/" + "iterations_model_3.txt"), "w")
     dict_string = repr(iterations_model)
+    file.write(dict_string)
+    file.close()
+
+    file = open(os.path.join(base_path + "/" + "iterations_rl_3.txt"), "w")
+    dict_string = repr(iterations_rl)
     file.write(dict_string)
     file.close()

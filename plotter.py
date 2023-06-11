@@ -15,9 +15,9 @@ if __name__ == '__main__':
     folder = "./PPO_logs/OcclusionEnv/"
     file = folder + "PPO_OcclusionEnv_log_" + str(trainIdx) + ".csv"
 
-    otherfile_raw = "./results/test2022-11-03 08:38:11.668158/iterations_raw_3.txt"
-    otherfile_random = "results/test2022-11-03 08:38:11.668158/iterations_random_3.txt"
-    otherfile_model = "results/test2022-11-03 08:38:11.668158/iterations_model_3.txt"
+    otherfile_raw = "./results/test50/iterations_raw_3.txt"
+    otherfile_random = "results/test50/iterations_random_3.txt"
+    otherfile_model = "results/test50/iterations_model_3.txt"
 
     raw_str = open(otherfile_raw).read()
     raw = np.array(list(ast.literal_eval(raw_str).values()))
@@ -43,8 +43,16 @@ if __name__ == '__main__':
     ma_times2 = ts.rolling(50).mean()
     ms_times2 = ts.rolling(50).std()
 
-    print(raw_mean, random_mean, model_mean, np.min(ma_times2))
-    print(raw_std, random_std, model_std, np.min(ms_times2))
+    where = np.argmin(ma_times2)
+    mean = np.min(ma_times2)
+    std = ms_times2[where]
+
+    rl_times = times[where-49:where+1]
+
+    print(raw_mean, random_mean, model_mean, mean)
+    print(raw_std, random_std, model_std, std)
+
+    np.savetxt("./results/test50/iterations_rl_3.txt", rl_times)
 
     plt.figure()
     plt.title("Running Reward")

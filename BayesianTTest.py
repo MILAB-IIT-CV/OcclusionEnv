@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import ast
 
-def makePlot(best_results, name, s, bins = 30):
+def makePlot(best_results, name, s, bins = 30, paired=True):
 
     fig, axes = plt.subplots(1, 1, figsize=(8, 5))
 
     #axes[0, 0].get_shared_x_axes().join(axes[0, 0], axes[1, 0])
 
     best.plot_posterior(best_results,
-                   'Mean',
+                   'Mean' if paired else 'Difference of means',
                    ax=axes,
                    bins=bins,
                    title='Difference of means',
@@ -38,11 +38,11 @@ def makePlot(best_results, name, s, bins = 30):
 
     fig.savefig(name + "/" + s + "_ES.pdf")
 
-def getValsFromTest(best_results):
+def getValsFromTest(best_results, paired = True):
 
-    hdi_min, hdi_max = best_results.hdi("Mean", 0.95)
+    hdi_min, hdi_max = best_results.hdi("Mean" if paired else 'Difference of means', 0.95)
 
-    trace = best_results.trace['Mean']
+    trace = best_results.trace['Mean' if paired else 'Difference of means']
 
     mean = trace.mean()
     median = np.median(trace)
@@ -72,14 +72,11 @@ if __name__ == '__main__':
     iterations_model = np.array(list(ast.literal_eval(iterations_model).values()))
     file.close()
 
-    file = open(os.path.join(base_path + "/" + "iterations_model_3.txt"), "r")
-    iterations_rl = file.read()
-    iterations_rl = np.array(list(ast.literal_eval(iterations_rl).values())) + np.random.rand(50)
-    file.close()
+    iterations_rl = np.loadtxt(os.path.join(base_path + "/" + "iterations_rl_3.txt"))
 
     vals = np.zeros((6,4))
 
-
+    #diff = iterations_model-iterations_rl
     print("Running BEST between Random and Raw")
     best_out = best.analyze_one(iterations_random - iterations_raw)
     hdi_min, hdi_max, ratio, mean, median = getValsFromTest(best_out)
